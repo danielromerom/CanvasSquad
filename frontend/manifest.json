@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Agency - Canvas Assistant",
+  "version": "1.0",
+  "permissions": ["storage"],
+  "action": { "default_title": "Agency" },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": ["src/content/index.jsx"],
+      "matches": ["<all_urls>"],
+      "run_at": "document_idle"
+    }
+  ]
+}
