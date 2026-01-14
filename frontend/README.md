@@ -1,16 +1,37 @@
-# React + Vite
+Backend
+cd backend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Windows
+python -m venv venv
+venv\Scripts\activate
 
-Currently, two official plugins are available:
+Mac/Linux
+python -m venv venv
+venv\Scripts\activate
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+pip install -r requirements.txt
 
-## React Compiler
+python manage.py migrate
+python manage.py runserver
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## Expanding the ESLint configuration
+Frontend
+cd frontend
+npm install
+npm run dev
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+Loading into Chrome
+
+Open Chrome Extensions:
+Go to chrome://extensions
+Toggle "Developer Mode" (Top Right) -> ON.
+
+Load the Extension:
+Click "Load Unpacked" (Top Left).
+Select the frontend/dist folder.
+Note: Do NOT select frontend or public. You must select dist.
+
+Verify:
+Go to Canvas (e.g., ufl.instructure.com).
+You should see the  widget injected into the dashboard.
