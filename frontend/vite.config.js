@@ -14,5 +14,9 @@ export default defineConfig({
     hmr: {
       port: 5173,
     },
+    cors: true,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+    }
   },
 })
