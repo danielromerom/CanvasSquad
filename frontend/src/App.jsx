@@ -1,14 +1,46 @@
-import React from 'react';
-import { Card, Box, Typography, Button, List, ListItem, ListItemText, Checkbox, IconButton } from '@mui/material';
-import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
+import React, { useState, useEffect } from 'react';
+import { Box, Typography, Card } from '@mui/material';
+import MainPanel from './components/MainPanel';
+import AssignmentPanel from './components/AssignmentPanel';
 
 function App() {
+  const [view, setView] = useState('main');
+
+  // checks what page is open
+  useEffect(() => {
+    const checkContext = () => {
+      const url = window.location.href;
+      const path = window.location.pathname; 
+      const container = document.getElementById('agency-native-widget');
+
+      if (url.includes('/assignments/') && !url.includes('/syllabus')) {
+        setView('assignment');
+        if (container) container.style.display = 'block';
+      } 
+      else if (path === '/') {
+        setView('main');
+        if (container) container.style.display = 'block';
+      } 
+      else {
+        setView('hidden');
+        if (container) container.style.display = 'none'; 
+      }
+    };
+
+    checkContext();
+    // check every second in case user navigates without reload
+    const intervalId = setInterval(checkContext, 1000);
+    return () => clearInterval(intervalId);
+  }, []);
+
   return (
-    <Box sx={{ width: '100%', fontFamily: 'Lato, sans-serif' }}>
+    <Box sx={{ width: '100%', fontFamily: 'Lato, sans-serif', mb: 2 }}>
       
+      {/* Header */}
       <Box sx={{ 
-        borderBottom: '1px solid #C7CDD1', 
-        pb: 1, 
+        borderBottom: '1px solid rgb(39, 53, 64, 0.1)', 
+        pb: 1,
+        mt: 2.75,
         mb: 1,
         display: 'flex',
         justifyContent: 'space-between',
@@ -17,58 +49,18 @@ function App() {
         <Typography variant="h6" sx={{ 
           fontSize: '1rem', 
           fontWeight: 'bold', 
-          color: '#2D3B45' 
+          color: 'rgb(39, 53, 64)' 
         }}>
-          Widged Injected
+          {/* Dynamic Title */}
+          {view === 'main' ? 'Agency Schedule' : 'Task Breakdown'}
         </Typography>
       </Box>
 
+      {/* Dynamic Content Area */}
       <Card elevation={0} sx={{ bgcolor: 'transparent' }}>
-        <List dense disablePadding>
-          {[1, 2, 3].map((item) => (
-            <ListItem key={item} sx={{ 
-              pl: 0, 
-              pr: 0,
-              alignItems: 'flex-start',
-              borderBottom: '1px solid #F5F5F5' 
-            }}>
-              <Checkbox 
-                size="small" 
-                sx={{ p: 0, mt: 0.5, mr: 1, color: '#2D3B45' }} 
-              />
-              <ListItemText 
-                primary={
-                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#2D3B45' }}>
-                    Basic stuff testing extension {item}
-                  </Typography>
-                }
-                secondary={
-                  <Typography variant="caption" sx={{ color: '#D12F19' }}>
-                    Due Tomorrow at 11:59pm
-                  </Typography>
-                } 
-              />
-            </ListItem>
-          ))}
-        </List>
-
-        {/* 3. Action Button */}
-        <Box sx={{ mt: 2 }}>
-          <Button 
-            fullWidth 
-            variant="contained" 
-            disableElevation
-            sx={{ 
-              bgcolor: '#008EE2', 
-              textTransform: 'none', 
-              fontWeight: 'bold',
-              '&:hover': { bgcolor: '#0074B8' }
-            }}
-          >
-            Button from MUI
-          </Button>
-        </Box>
+        {view === 'main' ? <MainPanel /> : <AssignmentPanel />}
       </Card>
+
     </Box>
   );
 }
