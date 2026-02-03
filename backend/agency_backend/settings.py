@@ -13,6 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-q0@qp6^jl77@kazq0fw$g9=c(2t#y!huafkktt03u6)yrw%hvv'
+LITELLM_BASE_URL =  "https://api.ai.it.ufl.edu"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -114,6 +115,7 @@ STATIC_URL = 'static/'
 
 CANVAS_BASE_URL = os.getenv('CANVAS_BASE_URL', 'https://ufldev.instructure.com')
 CANVAS_ACCESS_TOKEN = os.getenv('CANVAS_ACCESS_TOKEN', '')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://localhost:5173$",

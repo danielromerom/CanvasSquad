@@ -5,25 +5,26 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from .canvas_client import CanvasClient
 
+from .services.assignment_service import normalize_assignments
+from .services.llm_service import generate_task_suggestions
 class CourseAssignmentsView(APIView):
     def get(self, request, course_id):
         client = CanvasClient(settings.CANVAS_BASE_URL, settings.CANVAS_ACCESS_TOKEN)
         data = client.list_assignments(course_id)
 
-        # this is to clean up the data we send back to the frontend
-        clean = [{
-            "id": a.get("id"),
-            "name": a.get("name"),
-            "due_at": a.get("due_at"),
-            "points_possible": a.get("points_possible"),
-            "published": a.get("published"),
-            "html_url": a.get("html_url"),
-            "description": a.get("description"),
-        } for a in data]
+        raw_assignments = client.list_assignments(course_id)
 
+        # clean the data from canvas into normalized assignments
+        normalized_assignments = normalize_assignments(raw_assignments)
+
+        # call the LLM to create task suggestions
+        tasks = generate_task_suggestions(normalized_assignments)
+
+        # response back to frontend
         return Response({
             "course_id": course_id,
-            "count": len(clean),
-            "assignments": clean
+            "assignment_count": len(normalized_assignments),
+            "tasks": tasks
         })
 
+       
