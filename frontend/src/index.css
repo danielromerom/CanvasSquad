@@ -2,23 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Core Setup */
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
-  font-weight: 400;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
+  padding: 0;
+  background-color: #ffffff;
 }
 
-/* Chrome Extension Sidebar Styling */
+/* Chrome Extension Sidebar Container */
 #agency-native-widget {
   position: fixed !important;
   top: 0 !important;
@@ -26,30 +23,19 @@ body {
   width: 400px !important;
   height: 100vh !important;
   z-index: 9999 !important;
-  overflow-y: auto !important;
-  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1) !important;
   background: white !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.05) !important;
+  overflow-y: auto !important;
 }
 
-/* Optional: Make Canvas content adjust when sidebar is open */
-body:has(#agency-native-widget) {
-  margin-right: 400px !important;
-}
-
-/* Scrollbar styling for sidebar */
+/* Scrollbar Styling */
 #agency-native-widget::-webkit-scrollbar {
-  width: 8px;
-}
-
-#agency-native-widget::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  width: 6px;
 }
 
 #agency-native-widget::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
-}
-
-#agency-native-widget::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #e5e7eb;
+  border-radius: 10px;
 }
