@@ -2,10 +2,8 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from '../App';
 import '../styles.css';
+import '../index.css';
 
-const style = document.createElement('style');
-
-document.head.appendChild(style);
 
 function injectAgency() {
   const mainLayout = document.getElementById('main');
@@ -14,13 +12,20 @@ function injectAgency() {
   if (mainLayout && !document.getElementById(rootId)) {
     const root = document.createElement('div');
     root.id = rootId;
-    root.style.width = '300px'; 
-    root.style.minWidth = '300px';
-    root.style.flexShrink = '0'; 
-    root.style.display = 'none'; 
-    root.style.marginLeft = '24px'; 
-    root.style.marginRight = '24px'; 
-    root.style.height = 'fit-content'; 
+
+    // ⚡️ FIX: Use strict inline styles to fight Tailwind defaults
+    Object.assign(root.style, {
+      width: '300px',
+      minWidth: '300px',
+      maxWidth: '300px', // Added safety
+      flexShrink: '0',
+      display: 'none',    // Tailwind might try to make it something else
+      marginLeft: '24px',
+      marginRight: '24px',
+      height: 'fit-content',
+      position: 'static',  // Ensure it doesn't float/overlay
+      zIndex: '1'          // Ensure it sits in the flow
+    });
 
     mainLayout.appendChild(root);
 
@@ -32,11 +37,8 @@ function injectAgency() {
   }
 }
 
-injectAgency();
-
 setInterval(() => {
-    
-    // page detection for context
+    // ... (Your existing detection logic) ...
     const path = window.location.pathname;
     const isAssignment = path.includes('/assignments/') && !path.includes('/syllabus');
     const isDashboard = path === '/';
@@ -45,31 +47,31 @@ setInterval(() => {
     const myWidget = document.getElementById('agency-native-widget');
     const nativeSidebarWrapper = document.getElementById('right-side-wrapper');
 
-    // widget visibility
     const shouldShowWidget = isDashboard || isAssignment;
 
     if (myWidget) {
-        if (shouldShowWidget) {
-            myWidget.style.display = 'block';
-        } else {
-            myWidget.style.display = 'none';
+        const targetDisplay = shouldShowWidget ? 'block' : 'none';
+        if (myWidget.style.display !== targetDisplay) {
+            myWidget.style.display = targetDisplay;
         }
     } else if (shouldShowWidget) {
         injectAgency(); 
     }
 
-    // for main layouts like grades etc
+    // ⚡️ FIX: Reinforce the Flex container on #main
     if (mainLayout) {
-        mainLayout.style.display = 'flex';
-        mainLayout.style.flexDirection = 'row';
-        mainLayout.style.alignItems = 'flex-start';
-        mainLayout.style.width = '100%';
+        // We use setProperty to ensure priority over any Tailwind utility classes
+        mainLayout.style.setProperty('display', 'flex', 'important');
+        mainLayout.style.setProperty('flex-direction', 'row', 'important');
+        mainLayout.style.setProperty('align-items', 'flex-start', 'important');
+        mainLayout.style.setProperty('width', '100%', 'important');
+        // Ensure no weird overflow behavior from Tailwind
+        mainLayout.style.setProperty('box-sizing', 'border-box', 'important'); 
     }
 
-    // native sidebar
+    // ... (Your existing Sidebar Logic) ...
     if (nativeSidebarWrapper) {
         nativeSidebarWrapper.style.setProperty('position', 'static', 'important');
-        
         nativeSidebarWrapper.style.display = 'block';
         nativeSidebarWrapper.style.width = 'auto'; 
         nativeSidebarWrapper.style.minWidth = '250px'; 
@@ -78,25 +80,28 @@ setInterval(() => {
         document.body.classList.remove('with-right-side');
     }
 
-    // smart size when open/close left nav
+    // ... (Your Smart Width Logic) ...
     const leftNav = document.getElementById('left-side');
     const isNavOpen = leftNav && leftNav.getBoundingClientRect().width > 0;
 
     if (mainLayout) {
         const desiredWidth = isNavOpen ? '89.45%' : '100%';
-
         if (mainLayout.style.maxWidth !== desiredWidth) {
             mainLayout.style.maxWidth = desiredWidth;
         }
     }
 
-    // middle content
+    // ... (Your Middle Content Logic) ...
     const contentArea = document.getElementById('not_right_side');
     if (contentArea) {
         if (contentArea.style.flexGrow !== '1') contentArea.style.flexGrow = '1';
-        if (contentArea.style.width !== '0px') contentArea.style.width = '0px'; 
-        if (contentArea.style.minWidth !== '0px') contentArea.style.minWidth = '0px';
         
+        // ⚡️ CRITICAL: Tailwind sets 'width: auto' on many things. 
+        // We need to force this back to 100% (or 0px if you preferred the shrink trick).
+        // If 0px was squishing it, stick to 100% or auto but add min-width: 0.
+        if (contentArea.style.width !== '100%') contentArea.style.width = '100%';
+        if (contentArea.style.minWidth !== '0px') contentArea.style.minWidth = '0px';
+
         if (shouldShowWidget) {
              contentArea.style.marginRight = '24px';
         } else {
@@ -104,4 +109,4 @@ setInterval(() => {
         }
     }
 
-}, 0);
+}, 100);
