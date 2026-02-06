@@ -2,6 +2,17 @@ import json
 import openai
 from django.conf import settings
 from dotenv import load_dotenv
+import PyPDF2
+
+
+# # Read PDF file
+# def extract_text_from_pdf(pdf_path):
+#     text = ""
+#     with open(pdf_path, 'rb') as file:
+#         pdf_reader = PyPDF2.PdfReader(file)
+#         for page in pdf_reader.pages:
+#             text += page.extract_text() + "\n"
+#     return text
 
 
 
@@ -37,7 +48,12 @@ Respond ONLY in valid JSON using this structure:
     {{
       "title": "Assignment name",
       "priority": "High | Medium | Low",
-      "tasks": ["task 1", "task 2"]
+      "tasks": [
+        {{
+          "description": ,
+          "estimated_time_hours":
+        }},
+      ]
     }}
   ]
 }}
