@@ -17,17 +17,16 @@ body {
 
 /* Chrome Extension Sidebar Container */
 #agency-native-widget {
-  position: fixed !important;
-  top: 0 !important;
-  right: 0 !important;
-  width: 400px !important;
-  height: 100vh !important;
-  z-index: 9999 !important;
-  background: white !important;
-  display: flex !important;
-  flex-direction: column !important;
-  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.05) !important;
-  overflow-y: auto !important;
+  position: static !important; 
+  width: 300px !important;
+  min-width: 300px !important;
+  height: fit-content !important; 
+  z-index: 1 !important;
+  background: transparent !important;
+  display: block !important;
+  flex-shrink: 0 !important;
+  box-shadow: none !important;
+  overflow-y: visible !important;
 }
 
 /* Scrollbar Styling */

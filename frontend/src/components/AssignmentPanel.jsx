@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Typography, Chip, Card, CardContent, Checkbox } from '@mui/material';
-import { Timer } from 'lucide-react'; // Ensure you have this installed
+import { Timer, BarChart3 } from 'lucide-react';
+import TabSwitcher from './TabSwitcher';
 
 const DUMMY_ASSIGNMENT = {
   course: "MATH 221",
@@ -34,32 +35,18 @@ export default function AssignmentPanel({
   return (
     <Box sx={{ pt: 1, pb: 2, pl: 1.5, pr: 1.5, maxWidth: '640px', mx: 'auto' }}>
       
-      {/* --- 2. TOGGLE BUTTONS --- */}
-      <div className="bg-[#ececf0] rounded-[14px] p-[3px] flex gap-0 mb-8 max-w-sm mx-auto">
-        <button
-          onClick={() => setAssignmentTab('tasks')}
-          className={`flex-1 flex items-center justify-center gap-2 h-[29px] rounded-[14px] transition-all ${
-            assignmentTab === 'tasks' ? 'bg-white shadow-sm' : 'bg-transparent text-gray-500'
-          }`}
-        >
-          <svg className="size-[14px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-          </svg>
-          <span className="text-[12px] font-medium">Tasks</span>
-        </button>
-        <button
-          onClick={() => setAssignmentTab('pomodoro')}
-          className={`flex-1 flex items-center justify-center gap-2 h-[29px] rounded-[14px] transition-all ${
-            assignmentTab === 'pomodoro' ? 'bg-white shadow-sm' : 'bg-transparent text-gray-500'
-          }`}
-        >
-          <Timer className="size-[14px]" />
-          <span className="text-[12px] font-medium">Pomodoro</span>
-        </button>
+      {/* tab switcher */}
+      <div className="mb-6">
+        <TabSwitcher 
+          variant="assignment" 
+          activeTab={assignmentTab} 
+          onTabChange={setAssignmentTab} 
+        />
       </div>
 
       {/* --- 3. CONDITIONAL RENDERING --- */}
-      {assignmentTab === 'tasks' ? (
+      {/* 1. TASKS TAB */}
+      {assignmentTab === 'tasks' && (
         <>
           {/* ASSIGNMENT HEADER */}
           <div
@@ -112,11 +99,23 @@ export default function AssignmentPanel({
             ))}
           </div>
         </>
-      ) : (
-        /* POMODORO PLACEHOLDER */
-        <div className="text-center p-10 border-2 border-dashed border-gray-200 rounded-2xl">
+      )}
+
+      {/* 2. TIMER TAB */}
+      {assignmentTab === 'timer' && (
+        <div className="text-center p-10 border-2 border-dashed border-gray-200 rounded-2xl mt-4 bg-white">
           <Timer className="mx-auto size-10 text-gray-300 mb-2" />
-          <Typography className="text-gray-400">Pomodoro Timer Coming Soon</Typography>
+          <Typography className="text-gray-400 font-medium">Focus Timer Ready</Typography>
+          <Typography className="text-gray-300 text-sm">Select a task to start timing</Typography>
+        </div>
+      )}
+
+      {/* 3. STATS TAB */}
+      {assignmentTab === 'stats' && (
+        <div className="text-center p-10 border-2 border-dashed border-gray-200 rounded-2xl mt-4 bg-white">
+          <BarChart3 className="mx-auto size-10 text-gray-300 mb-2" />
+          <Typography className="text-gray-400 font-medium">Assignment Statistics</Typography>
+          <Typography className="text-gray-300 text-sm">Class average and difficulty metrics</Typography>
         </div>
       )}
     </Box>
