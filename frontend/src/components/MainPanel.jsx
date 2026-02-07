@@ -47,6 +47,7 @@ export default function MainPanel() {
   const [currentTab, setCurrentTab] = useState('schedule');
   const [currentDate, setCurrentDate] = useState(new Date());
 
+  const [assignments, setAssignments] = useState(INITIAL_ASSIGNMENTS);
   const [expandedIds, setExpandedIds] = useState([]); 
   const [scheduledTasks, setScheduledTasks] = useState({});
 
@@ -60,7 +61,7 @@ export default function MainPanel() {
     const diff = current.getDate() - day + (day === 0 ? -6 : 1); 
     const monday = new Date(current.setDate(diff));
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 7; i++) {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
       dates.push(d);
@@ -90,12 +91,15 @@ export default function MainPanel() {
     );
   };
 
-  const toggleTaskCompletion = (dateStr, taskId) => {
-    setScheduledTasks(prev => ({
-      ...prev,
-      [dateStr]: prev[dateStr].map(t =>
-        t.id === taskId ? { ...t, completed: !t.completed } : t
-      )
+  const toggleAssignmentTask = (assignmentId, taskId) => {
+    setAssignments(prev => prev.map(assign => {
+      if (assign.id !== assignmentId) return assign;
+      return {
+        ...assign,
+        tasks: assign.tasks.map(task => 
+          task.id === taskId ? { ...task, completed: !task.completed } : task
+        )
+      };
     }));
   };
   
@@ -187,8 +191,8 @@ export default function MainPanel() {
 
             {/* calendar grid */}
             <Box sx={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(5, 1fr)', 
+                display: 'flex', 
+                gridTemplateColumns: 'repeat(7, 1fr)', 
                 gap: 1, 
                 mb: 4 
             }}>
@@ -216,8 +220,15 @@ export default function MainPanel() {
                       backgroundColor: isTodayDate ? '#eef2ff' : '#fff',
                       minHeight: '120px',
                       overflow: 'hidden',
-                      transition: 'background-color 0.2s',
-                      cursor: 'default'
+                      flex: 1, 
+                      minWidth: 0,
+                      transition: 'flex 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), background-color 0.2s', 
+                      cursor: 'default',
+                      '&:hover': {
+                        flex: 6,
+                        zIndex: 10,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+                      }
                     }}
                   >
                     <Typography variant="caption" sx={{ pointerEvents: 'none', fontWeight: 'bold', textTransform: 'uppercase', color: isTodayDate ? '#4f46e5' : '#9ca3af', fontSize: '10px' }}>
@@ -245,7 +256,6 @@ export default function MainPanel() {
                           className="group" // Enables hover effects for child
                           onClick={(e) => {
                             e.stopPropagation(); 
-                             toggleTaskCompletion(dateStr, task.id);
                           }}
                           sx={{
                               bgcolor: 'white',
@@ -268,11 +278,6 @@ export default function MainPanel() {
                               '&:hover .remove-btn': { display: 'flex' }
                           }}
                         >
-
-                          {task.completed ?
-                            <CheckCircle2 size={10} color="#10b981" /> :
-                            <Circle size={10} color="#d1d5db" />
-                          }
                           
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {task.label}
@@ -314,11 +319,12 @@ export default function MainPanel() {
               </button>
             </Box>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {INITIAL_ASSIGNMENTS.map((assignment) => {
+            {assignments.map((assignment) => {
                 const isExpanded = expandedIds.includes(assignment.id);
+                const completedCount = assignment.tasks.filter(t => t.completed).length;
                 const totalSubtasks = assignment.tasks.length;
                 let scheduledCount = 0;
+                
                 Object.values(scheduledTasks).flat().forEach(t => {
                    if (assignment.tasks.some(at => at.id === t.id)) scheduledCount++;
                 });
@@ -358,7 +364,7 @@ export default function MainPanel() {
                         {assignment.tasks.map((task) => (
                           <Box 
                             key={task.id}
-                            draggable={true} // Explicitly allow dragging
+                            draggable={true}
                             onDragStart={(e) => handleDragStart(e, task, assignment.color)}
                             onDragEnd={handleDragEnd}
                             sx={{ 
@@ -377,13 +383,34 @@ export default function MainPanel() {
                                 '&:hover .grip-icon': { color: '#6b7280' }
                             }}
                           >
-                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                               <GripVertical size={14} className="grip-icon" color="#d1d5db" />
-                               <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>{task.label}</span>
+                            {/* Left Side: Checkbox + Text */}
+                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                               
+                               {/* CHECKBOX: Click to toggle */}
+                               <div 
+                                 onClick={(e) => {
+                                   e.stopPropagation(); // Stop drag from starting
+                                   toggleAssignmentTask(assignment.id, task.id);
+                                 }}
+                                 style={{ cursor: 'pointer', display: 'flex' }}
+                               >
+                                 {task.completed ? 
+                                   <CheckCircle2 size={18} color="#10b981" /> : 
+                                   <Circle size={18} color="#d1d5db" />
+                                 }
+                               </div>
+
+                               <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500, textDecoration: task.completed ? 'line-through' : 'none' }}>
+                                 {task.label}
+                               </span>
                              </div>
-                             <span style={{ fontSize: '11px', color: '#9ca3af', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
-                               {task.time}
-                             </span>
+
+                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                               <span style={{ fontSize: '11px', color: '#9ca3af', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
+                                 {task.time}
+                               </span>
+                               <GripVertical size={14} className="grip-icon" color="#d1d5db" />
+                             </div>
                           </Box>
                         ))}
                       </div>
@@ -391,7 +418,6 @@ export default function MainPanel() {
                   </div>
                 );
               })}
-            </div>
           </>
         )}
 
