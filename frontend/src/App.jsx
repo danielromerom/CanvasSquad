@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Typography, Card } from '@mui/material';
 import MainPanel from './components/MainPanel';
 import AssignmentPanel from './components/AssignmentPanel';
+import TimerPanel from './components/TimerPanel';
 
 function App() {
   const [view, setView] = useState('main');
@@ -59,6 +60,7 @@ function App() {
       {/* Dynamic Content Area */}
       <Card elevation={0} sx={{ bgcolor: 'transparent' }}>
         {view === 'main' ? <MainPanel /> : <AssignmentPanel />}
+        <TimerPanel />
       </Card>
 
     </Box>

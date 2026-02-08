@@ -1,0 +1,134 @@
+.timer-panel-container{
+    display: flex;
+    flex-direction: column;
+    padding: 14px;
+    /* width: 380px; */
+    background-image: linear-gradient(to right, #F4F6FF,#FDFAFF);
+}
+.countdown-timer-container{
+    display: flex;
+    flex-direction: column;
+    background-color: white;
+    padding: 8px;
+    border-radius: 10px;
+    border: 2px solid #E5E5E5;
+    margin-bottom: 10px;
+}
+
+.timer-toggle-container{
+    display: flex;
+    margin-bottom: 50px;
+}
+
+.timer-title{
+    flex-grow: 1;
+}
+.tracker-container{
+    display: flex;
+    flex-grow: 1;
+}
+
+
+.sessions-container, .focus-container{
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    padding: 8px;
+    border: 2px solid #E5E5E5;
+    border-radius: 10px;
+    margin: 4px;
+    background-color: white;
+    flex-basis: 0;
+}
+
+
+.sessions, .focus{
+    display: flex;
+    align-items: center;
+    margin: 0;
+    margin-bottom: 40px;
+    font-weight: 100;
+    font-size: 12px;
+    gap: 4px;
+}
+
+.today-sessions, .focus-minutes{
+    margin-bottom: 16px;
+}
+
+.works-title, .tips{
+    height: 60px;
+    font-size: 12px;
+}
+
+.how-it-works-container{
+    background-color: #F6F4FF;
+    border: 2px solid #C6D2FF;
+    border-radius: 10px;
+    padding: 8px;
+    flex-grow: 1;
+}
+
+.tips-container{
+    display: flex;
+    flex-direction: column;
+    border: 2px solid #E5E5E5;
+    border-radius: 10px;
+    background-color: white;
+    padding: 8px;
+}
+
+.how-it-works-container ul, .tips-container ul{
+    padding-left: 20px;
+}
+
+.works-title, .tips{
+    font-weight: 700;
+}
+
+.tracker-container,.how-it-works-container,.tips-container{
+     margin-bottom: 10px;
+}
+
+.before-starting, .breaks{
+    margin: 0px;
+    font-size: 14px;
+}
+
+.before-start-contiainer{
+    margin-bottom: 16px;
+}
+
+.before-start-header, .breaks-header{
+    display: flex;
+    gap: 6px;
+}
+.breaks-contiainer{
+    margin-bottom: 20px;
+}
+
+.tips-container ul{
+    margin: 0px;
+}
+
+ul li{
+    font-size: 14px;
+}
+
+.item-image{
+    width: 16px;
+    height: auto;
+}
+
+.pomodero-title{
+    font-size: 16px;
+    margin-bottom: 0px;
+    margin-top: 0px;
+}
+.focused{
+    margin-bottom: 15px;
+    margin-top: 0px;
+    color: #4A5565;
+    font-weight: 100;
+    font-size: 12px;
+}
