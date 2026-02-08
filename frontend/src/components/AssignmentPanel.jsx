@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, Typography, Chip, Card, CardContent, Checkbox } from '@mui/material';
 import { Timer, BarChart3 } from 'lucide-react';
 import TabSwitcher from './TabSwitcher';
+import TimerPanel from './TimerPanel';
 
 const DUMMY_ASSIGNMENT = {
   course: "MATH 221",
@@ -103,10 +104,8 @@ export default function AssignmentPanel({
 
       {/* 2. TIMER TAB */}
       {assignmentTab === 'timer' && (
-        <div className="text-center p-10 border-2 border-dashed border-gray-200 rounded-2xl mt-4 bg-white">
-          <Timer className="mx-auto size-10 text-gray-300 mb-2" />
-          <Typography className="text-gray-400 font-medium">Focus Timer Ready</Typography>
-          <Typography className="text-gray-300 text-sm">Select a task to start timing</Typography>
+        <div className="flex-grow h-full overflow-hidden">   
+           <TimerPanel />
         </div>
       )}
 

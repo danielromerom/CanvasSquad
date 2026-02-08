@@ -1,6 +1,5 @@
 import React, {useEffect, useState} from "react";
 import Timer from "./Timer"
-import "./CountdownTimer.css"
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import PauseOutlinedIcon from '@mui/icons-material/PauseOutlined';
 import resetLogo from "../assets/reset.svg"
@@ -10,7 +9,6 @@ export default function CountdownTimer(){
     const [seconds, setSeconds] = useState(0);
     const [tensSeconds, setTensSeconds] = useState(0);
     const [isRunning, setIsRunning] = useState(false);
-    let initialTime = 0;
 
     useEffect(() => {
         let interval;
@@ -23,17 +21,18 @@ export default function CountdownTimer(){
                     setSeconds(9);
                 }
                 else{
-                    setMinutes((minutes)=> minutes-1);
-                    setTensSeconds(5);
-                    setSeconds(9);
+                    if (minutes === 0) {
+                        setIsRunning(false);
+                    } else {
+                        setMinutes((minutes) => minutes - 1);
+                        setTensSeconds(5);
+                        setSeconds(9);
+                    }
                 }
             }, 1000);
         }
-        if(minutes === 0 && tensSeconds === 0 && seconds === 0){
-            resetTimer();
-        }
         return () => clearInterval(interval);
-    }, [seconds, minutes, isRunning])
+    }, [seconds, minutes, tensSeconds, isRunning])
 
 
     //Start, pause, reset functions
@@ -53,45 +52,39 @@ export default function CountdownTimer(){
         setTensSeconds(0)
         setSeconds(0)
     }
-
-    //Handlers
-    const changeSeconds =(e)=>{
-        setSeconds(e.target.value)
-    }
-
-    const changeTensSeconds =(e)=>{
-        setTensSeconds(e.target.value)
-    }
-    const changeMinutes =(e)=>{
-        setMinutes(e.target.value)
-    }
     
     return(
-        <div className="countdown-container">
+        <div className="flex flex-col w-full">
             <Timer 
-            seconds={seconds}
-            tensSeconds={tensSeconds} 
-            minutes={minutes} 
-            changeSeconds={changeSeconds}
-            changeTensSeconds={changeTensSeconds} 
-            changeMinutes={changeMinutes}
+                seconds={seconds} 
+                tensSeconds={tensSeconds} 
+                minutes={minutes} 
             />
 
-            <div className="timer-buttons">
-                {!isRunning &&
-                    (<button className="play-btn" onClick={startTimer}>
-                        <div className="play-icon"><PlayArrowOutlinedIcon sx={{ color: "white", fontSize: "medium" }} /></div> 
-                        Start
-                    </button>)}
-                {isRunning &&
-                (<button className="pause-btn" onClick={pauseTimer}>
-                    <div className="pause-icon"><PauseOutlinedIcon sx={{ color: "white", fontSize: "medium" }} /></div>
-                    Pause
-                </button>)}
-                <button className="reset-btn" onClick={resetTimer}>
-                    <div><img  src={resetLogo} className="reset-logo"/></div>
+            <div className="flex items-center gap-3 justify-center">
+                {!isRunning ? (
+                    <button 
+                        className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2.5 rounded-full font-bold text-sm shadow-md hover:bg-indigo-700 transition-all flex-grow justify-center" 
+                        onClick={startTimer}
+                    >
+                        <PlayArrowOutlinedIcon size={16} fill="currentColor" /> Start
+                    </button>
+                ) : (
+                    <button 
+                        className="flex items-center gap-2 bg-amber-500 text-white px-6 py-2.5 rounded-full font-bold text-sm shadow-md hover:bg-amber-600 transition-all flex-grow justify-center" 
+                        onClick={pauseTimer}
+                    >
+                        <PauseOutlinedIcon size={16} fill="currentColor" /> Pause
+                    </button>
+                )}
+                
+                <button 
+                    className="p-2.5 bg-white border border-gray-200 rounded-full text-gray-500 hover:bg-gray-50 transition-colors" 
+                    onClick={resetTimer}
+                >
+                    <img src={resetLogo} alt="Reset" className="w-3 h-3" />
                 </button>
             </div>
         </div>
-    )
+    );
 }

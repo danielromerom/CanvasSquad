@@ -60,7 +60,6 @@ function App() {
       {/* Dynamic Content Area */}
       <Card elevation={0} sx={{ bgcolor: 'transparent' }}>
         {view === 'main' ? <MainPanel /> : <AssignmentPanel />}
-        <TimerPanel />
       </Card>
 
     </Box>

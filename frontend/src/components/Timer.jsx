@@ -1,16 +1,20 @@
-import "./Timer.css"
-export default function Timer({seconds, tensSeconds, minutes, changeSeconds,changeTensSeconds, changeMinutes}){
+
+export default function Timer({seconds, tensSeconds, minutes}){
+    // for double digits ex 5 would be 05
+    const formatTime = (val) => String(val).padStart(2, '0');
+
     return(
-        <div className="timer-container">
-            <div className="time">
-                <div value={minutes} onChange={changeMinutes}>{minutes}</div>
-                <div>:</div>
-                <div value={tensSeconds} onChange={changeTensSeconds}>{tensSeconds}</div>
-                <div value={seconds} onChange={changeSeconds}>{seconds}</div>
+        <div className="w-full bg-gradient-to-br from-[#2C7EFF] to-[#4F3BF7] rounded-2xl p-6 text-black text-center shadow-lg relative overflow-hidden mb-4">
+        
+            <div className="relative z-10 flex flex-col items-center">
+                <div className="bg-white/20 backdrop-blur-sm text-[10px] font-bold px-3 py-1 rounded-full mb-4 border border-white/10 uppercase tracking-wider">
+                    Focus Session
+                </div>
+
+                <div className="text-6xl font-mono font-bold tracking-widest leading-none mb-2 tabular-nums">
+                        {formatTime(minutes)}:{tensSeconds}{seconds}
+                </div>
             </div>
-            
-            <div className="session-type">Focus</div>
         </div>
     )
-
 }
