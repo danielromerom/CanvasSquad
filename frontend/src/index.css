@@ -18,8 +18,8 @@ body {
 /* Chrome Extension Sidebar Container */
 #agency-native-widget {
   position: static !important; 
-  width: 300px !important;
-  min-width: 300px !important;
+  width: 400px !important;
+  min-width: 400px !important;
   height: fit-content !important; 
   z-index: 1 !important;
   background: transparent !important;
