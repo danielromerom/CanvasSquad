@@ -71,7 +71,23 @@ Respond ONLY in valid JSON using this structure:
     content = response.choices[0].message.content
 
     try:
-        return json.loads(content)
+        llm_data = json.loads(content)
+
+        enhanced_assignments = []
+
+        for llm_assign in llm_data.get("assignments", []):
+            original = next(
+                (a for a in assignments if a["title"] == llm_assign["title"]), 
+                None
+            )
+            
+            # add the due_at field
+            if original:
+                llm_assign["due_at"] = original["due_at"]
+                
+            enhanced_assignments.append(llm_assign)
+            
+        return {"assignments": enhanced_assignments}
     except json.JSONDecodeError:
         # Fallback: log + return raw text
         return {

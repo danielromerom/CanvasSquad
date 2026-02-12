@@ -117,7 +117,31 @@ CANVAS_BASE_URL = os.getenv('CANVAS_BASE_URL', 'https://ufldev.instructure.com')
 CANVAS_ACCESS_TOKEN = os.getenv('CANVAS_ACCESS_TOKEN', '')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '.ngrok-free.app', '.ngrok-free.dev']
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "ngrok-skip-browser-warning",
+]
+
+CORS_ALLOWED_ORIGINS = [
+    "https://ufldev.instructure.com"
+]
+
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://localhost:5173$",
     r"^chrome-extension://.*$",  # The .* means "any ID is okay"
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.ngrok-free.app',
+    'https://*.ngrok-free.dev',
 ]

@@ -7,6 +7,17 @@ from .canvas_client import CanvasClient
 
 from .services.assignment_service import normalize_assignments
 from .services.llm_service import generate_task_suggestions
+
+class CoursesView(APIView):
+    def get(self, request):
+        client = CanvasClient(settings.CANVAS_BASE_URL, settings.CANVAS_ACCESS_TOKEN)
+        
+        courses_raw = client.list_courses()
+        
+        return Response({
+            "courses": courses_raw
+        })
+
 class CourseAssignmentsView(APIView):
     def get(self, request, course_id):
         client = CanvasClient(settings.CANVAS_BASE_URL, settings.CANVAS_ACCESS_TOKEN)
