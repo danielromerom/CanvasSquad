@@ -41,6 +41,8 @@ For EACH assignment:
 - Break it into 3-5 concrete, actionable steps
 - Consider due dates and assignment weight
 - Assign a priority (High, Medium, Low)
+- If needed add a longer description for the task to clarify it further.
+- For EACH subtask, if needed for context, provide a 1-sentence 'ai_insight' which is a pro-tip, key concept, or helpful advice for that specific step.
 
 Respond ONLY in valid JSON using this structure:
 {{
@@ -50,8 +52,10 @@ Respond ONLY in valid JSON using this structure:
       "priority": "High | Medium | Low",
       "tasks": [
         {{
-          "description": ,
-          "estimated_time_hours":
+          "label": "Task description",
+          "estimated_time_hours": 1.5,
+          "description: "Optional longer description for the task",
+          "ai_insight": "The pro-tip or summary here"
         }},
       ]
     }}
@@ -71,7 +75,24 @@ Respond ONLY in valid JSON using this structure:
     content = response.choices[0].message.content
 
     try:
-        return json.loads(content)
+        llm_data = json.loads(content)
+
+        enhanced_assignments = []
+
+        for llm_assign in llm_data.get("assignments", []):
+            original = next(
+                (a for a in assignments if a["title"] == llm_assign["title"]), 
+                None
+            )
+            
+            # add the due_at field
+            if original:
+                llm_assign["id"] = original["id"]
+                llm_assign["due_at"] = original["due_at"]
+                
+            enhanced_assignments.append(llm_assign)
+            
+        return {"assignments": enhanced_assignments}
     except json.JSONDecodeError:
         # Fallback: log + return raw text
         return {

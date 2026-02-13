@@ -1,57 +1,121 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Box, Typography, Collapse, IconButton } from '@mui/material';
 import {Timer, BarChart3, ChevronLeft, ChevronRight, Sparkles, ChevronDown, ChevronRight as ChevronRightIcon, GripVertical, CheckCircle2, Circle, X} from 'lucide-react';
 import TabSwitcher from './TabSwitcher';
+import { API_BASE_URL, FETCH_HEADERS } from '../../config.js';
 
-// mock data for now
-const INITIAL_ASSIGNMENTS = [
-  {
-    id: 'math221',
-    course: 'MATH 221',
-    title: 'Linear Algebra Problem Set 5',
-    color: '#3b82f6',
-    due: 'Feb 2',
-    tasks: [
-      { id: 't1', label: 'Review eigenvalue concepts', time: '30m' },
-      { id: 't2', label: 'Solve problems 1-5', time: '60m' },
-      { id: 't3', label: 'Solve problems 6-10', time: '60m' },
-      { id: 't4', label: 'Review and check answers', time: '30m' },
-    ]
-  },
-  {
-    id: 'cs240',
-    course: 'CS 240',
-    title: 'Data Structures Project',
-    color: '#a855f7',
-    due: 'Feb 5',
-    tasks: [
-      { id: 't5', label: 'Setup project repo', time: '15m' },
-      { id: 't6', label: 'Implement Binary Tree', time: '90m' },
-      { id: 't7', label: 'Write unit tests', time: '45m' },
-    ]
-  },
-  {
-    id: 'hist105',
-    course: 'HIST 105',
-    title: 'History Essay Draft',
-    color: '#22c55e',
-    due: 'Jan 31',
-    tasks: [
-      { id: 't8', label: 'Find 3 primary sources', time: '45m' },
-      { id: 't9', label: 'Write outline', time: '30m' },
-    ]
-  }
+const COURSE_COLORS = [
+  '#3b82f6',
+  '#8b5cf6',
+  '#ec4899',
+  '#10b981',
+  '#f59e0b',
+  '#06b6d4',
+  '#f43f5e',
 ];
+
+const getCourseColor = (id) => {
+  const numId = parseInt(id, 10) || 0;
+  return COURSE_COLORS[numId % COURSE_COLORS.length];
+};
 
 export default function MainPanel() {
   const [currentTab, setCurrentTab] = useState('schedule');
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  const [assignments, setAssignments] = useState(INITIAL_ASSIGNMENTS);
+  const [assignments, setAssignments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   const [expandedIds, setExpandedIds] = useState([]); 
-  const [scheduledTasks, setScheduledTasks] = useState({});
+  const [scheduledTasks, setScheduledTasks] = useState(() => {
+    const saved = localStorage.getItem('scheduledTasks');
+    return saved ? JSON.parse(saved) : {};
+  });
 
   const draggedTaskRef = useRef(null);
+
+  useEffect(() => {
+    localStorage.setItem('scheduledTasks', JSON.stringify(scheduledTasks));
+  }, [scheduledTasks]);
+
+  useEffect(() => {
+    const fetchAllData = async () => {
+      try {
+        
+        const coursesResponse = await fetch(`${API_BASE_URL}/api/canvas/courses/`, { headers: FETCH_HEADERS}); 
+        const coursesData = await coursesResponse.json();
+
+        const courseList = coursesData.courses || [];
+
+        // fetch Assignments for each course in parallel
+        const promises = courseList.map(course => 
+          fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/assignments/`, { headers: FETCH_HEADERS })
+            .then(res => {
+                if (!res.ok) return null;
+                return res.json();
+            })
+            .then(assignmentData => {
+                if (assignmentData) {
+                    assignmentData.course_name = course.course_code || course.name; 
+                }
+                return assignmentData;
+            })
+        );
+
+        const results = await Promise.all(promises);
+
+        const now = new Date();
+        const nextWeek = new Date();
+        nextWeek.setDate(now.getDate() + 7);
+
+        const allAssignments = results
+          .filter(data => data !== null)
+          .flatMap(data => {
+            const courseId = data.course_id;
+            const backendAssignments = data.tasks.assignments;
+            const courseName = data.course_name;
+
+            // Filter individual assignments b4 mapping
+            const filteredBackend = backendAssignments.filter(assign => {
+                if (!assign.due_at) return false;
+                const dueDate = new Date(assign.due_at);
+
+                return dueDate >= now && dueDate <= nextWeek;
+            });
+
+            // Map to UI structure
+            return filteredBackend.map((assign, index) => ({
+              id: `assign-${courseId}-${index}`,
+              course: `${courseName}`,
+
+              canvas_assignment_id: assign.id,
+              canvas_course_id: courseId,
+
+              title: assign.title,
+              color: getCourseColor(courseId),
+
+              due: new Date(assign.due_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute:'2-digit' }),
+              priority: assign.priority,
+              tasks: assign.tasks.map((t, tIndex) => ({
+                id: `task-${courseId}-${index}-${tIndex}`,
+                label: t.description,
+                time: `${t.estimated_time_hours}h`,
+                completed: false
+              }))
+            }));
+          });
+
+        setAssignments(allAssignments);
+        setIsLoading(false);
+
+      } catch (error) {
+        console.error("Failed to fetch assignments:", error);
+        setIsLoading(false);
+      }
+    };
+
+    fetchAllData();
+    }, []);
 
   // date utilities
   const getWeekDates = (baseDate) => {
@@ -319,106 +383,132 @@ export default function MainPanel() {
               </button>
             </Box>
 
-            {assignments.map((assignment) => {
-                const isExpanded = expandedIds.includes(assignment.id);
-                const completedCount = assignment.tasks.filter(t => t.completed).length;
-                const totalSubtasks = assignment.tasks.length;
-                let scheduledCount = 0;
-                
-                Object.values(scheduledTasks).flat().forEach(t => {
-                   if (assignment.tasks.some(at => at.id === t.id)) scheduledCount++;
-                });
+            {isLoading ? (
+               <Box sx={{ textAlign: 'center', py: 4 }}>
+                 <Typography variant="body2" color="text.secondary">Loading your assignments...</Typography>
+               </Box>
+            ) : assignments.length === 0 ? (
+               <Box sx={{ textAlign: 'center', py: 4 }}>
+                 <Typography variant="body2" color="text.secondary">No assignments due in the next 7 days! 🎉</Typography>
+               </Box>
+            ) : (
+              assignments.map((assignment) => {
+                  const isExpanded = expandedIds.includes(assignment.id);
+                  const totalSubtasks = assignment.tasks.length;
+                  let scheduledCount = 0;
+                  Object.values(scheduledTasks).flat().forEach(t => { if (assignment.tasks.some(at => at.id === t.id)) scheduledCount++; });
 
-                return (
-                  <div key={assignment.id} style={{ border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden', background: 'white' }}>
-                    
-                    {/* Accordion Header */}
-                    <div 
-                      onClick={() => toggleAccordion(assignment.id)}
-                      style={{ padding: '16px', display: 'flex', gap: '12px', cursor: 'pointer' }}
-                    >
-                      <div style={{ width: '4px', height: '40px', backgroundColor: assignment.color, borderRadius: '4px' }} />
+                  return (
+                    <div key={assignment.id} style={{ border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden', background: 'white' }}>
                       
-                      <div style={{ flexGrow: 1 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                           <div>
-                             <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#111827' }}>{assignment.title}</h4>
-                             <p style={{ margin: 0, fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{assignment.course}</p>
-                           </div>
-                           <div style={{ color: '#9ca3af' }}>
-                             {isExpanded ? <ChevronDown size={18} /> : <ChevronRightIcon size={18} />}
-                           </div>
-                        </div>
-                        <div style={{ marginTop: '4px', display: 'flex', gap: '12px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
-                          <span>Due: {assignment.due}</span>
-                          <span style={{ color: scheduledCount === totalSubtasks ? '#16a34a' : '#9ca3af' }}>
-                            {scheduledCount}/{totalSubtasks} scheduled
-                          </span>
+                      {/* Accordion Header */}
+                      <div 
+                        onClick={() => toggleAccordion(assignment.id)}
+                        style={{ padding: '16px', display: 'flex', gap: '12px', cursor: 'pointer' }}
+                      >
+                        <div style={{ width: '4px', height: '40px', backgroundColor: assignment.color, borderRadius: '4px' }} />
+                        
+                        <div style={{ flexGrow: 1 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                          <h4 
+                              style={{ 
+                                margin: 0, 
+                                fontSize: '14px', 
+                                fontWeight: 'bold', 
+                                color: '#111827',
+                                cursor: 'pointer',
+                                transition: 'text-decoration 0.2s'
+                              }}
+                              className="hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation(); 
+
+                                const cID = assignment.canvas_course_id;
+                                const aID = assignment.canvas_assignment_id;
+
+                                window.open(`https://ufldev.instructure.com/courses/${cID}/assignments/${aID}`, '_blank');
+                              }}
+                            >
+                              {assignment.title}
+                            </h4>
+                                <p style={{ margin: 0, fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{assignment.course}</p>
+                            </div>
+                            <div style={{ color: '#9ca3af' }}>
+                              {isExpanded ? <ChevronDown size={18} /> : <ChevronRightIcon size={18} />}
+                            </div>
+                          </div>
+                          <div style={{ marginTop: '4px', display: 'flex', gap: '12px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
+                            <span>Due: {assignment.due}</span>
+                            <span style={{ color: scheduledCount === totalSubtasks ? '#16a34a' : '#9ca3af' }}>
+                              {scheduledCount}/{totalSubtasks} scheduled
+                            </span>
+                          </div>
                         </div>
                       </div>
+
+                      {/* Accordion Body */}
+                      <Collapse in={isExpanded}>
+                        <div style={{ background: '#f9fafb', padding: '8px', borderTop: '1px solid #f3f4f6' }}>
+                          {assignment.tasks.map((task) => (
+                            <Box 
+                              key={task.id}
+                              draggable={true}
+                              onDragStart={(e) => handleDragStart(e, task, assignment.color)}
+                              onDragEnd={handleDragEnd}
+                              sx={{ 
+                                  bgcolor: 'white', 
+                                  border: '1px solid #e5e7eb', 
+                                  borderRadius: '8px', 
+                                  p: 1, 
+                                  mb: 1, 
+                                  display: 'flex', 
+                                  justifyContent: 'space-between', 
+                                  alignItems: 'center', 
+                                  cursor: 'grab', 
+                                  userSelect: 'none',
+                                  transition: 'border-color 0.2s',
+                                  '&:hover': { borderColor: '#a5b4fc' },
+                                  '&:hover .grip-icon': { color: '#6b7280' }
+                              }}
+                            >
+                              {/* Left Side: Checkbox + Text */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                
+                                {/* CHECKBOX: Click to toggle */}
+                                <div 
+                                  onClick={(e) => {
+                                    e.stopPropagation(); // Stop drag from starting
+                                    toggleAssignmentTask(assignment.id, task.id);
+                                  }}
+                                  style={{ cursor: 'pointer', display: 'flex' }}
+                                >
+                                  {task.completed ? 
+                                    <CheckCircle2 size={18} color="#10b981" /> : 
+                                    <Circle size={18} color="#d1d5db" />
+                                  }
+                                </div>
+
+                                <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500, textDecoration: task.completed ? 'line-through' : 'none' }}>
+                                  {task.label}
+                                </span>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '11px', color: '#9ca3af', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
+                                  {task.time}
+                                </span>
+                                <GripVertical size={14} className="grip-icon" color="#d1d5db" />
+                              </div>
+                            </Box>
+                          ))}
+                        </div>
+                      </Collapse>
                     </div>
-
-                    {/* Accordion Body */}
-                    <Collapse in={isExpanded}>
-                      <div style={{ background: '#f9fafb', padding: '8px', borderTop: '1px solid #f3f4f6' }}>
-                        {assignment.tasks.map((task) => (
-                          <Box 
-                            key={task.id}
-                            draggable={true}
-                            onDragStart={(e) => handleDragStart(e, task, assignment.color)}
-                            onDragEnd={handleDragEnd}
-                            sx={{ 
-                                bgcolor: 'white', 
-                                border: '1px solid #e5e7eb', 
-                                borderRadius: '8px', 
-                                p: 1, 
-                                mb: 1, 
-                                display: 'flex', 
-                                justifyContent: 'space-between', 
-                                alignItems: 'center', 
-                                cursor: 'grab', 
-                                userSelect: 'none',
-                                transition: 'border-color 0.2s',
-                                '&:hover': { borderColor: '#a5b4fc' },
-                                '&:hover .grip-icon': { color: '#6b7280' }
-                            }}
-                          >
-                            {/* Left Side: Checkbox + Text */}
-                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                               
-                               {/* CHECKBOX: Click to toggle */}
-                               <div 
-                                 onClick={(e) => {
-                                   e.stopPropagation(); // Stop drag from starting
-                                   toggleAssignmentTask(assignment.id, task.id);
-                                 }}
-                                 style={{ cursor: 'pointer', display: 'flex' }}
-                               >
-                                 {task.completed ? 
-                                   <CheckCircle2 size={18} color="#10b981" /> : 
-                                   <Circle size={18} color="#d1d5db" />
-                                 }
-                               </div>
-
-                               <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500, textDecoration: task.completed ? 'line-through' : 'none' }}>
-                                 {task.label}
-                               </span>
-                             </div>
-
-                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                               <span style={{ fontSize: '11px', color: '#9ca3af', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
-                                 {task.time}
-                               </span>
-                               <GripVertical size={14} className="grip-icon" color="#d1d5db" />
-                             </div>
-                          </Box>
-                        ))}
-                      </div>
-                    </Collapse>
-                  </div>
-                );
-              })}
-          </>
+                  );
+                })
+              )}
+            </>
         )}
 
         {/* Placeholders for other tabs */}
