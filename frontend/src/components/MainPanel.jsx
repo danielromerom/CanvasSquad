@@ -88,6 +88,9 @@ export default function MainPanel() {
               id: `assign-${courseId}-${index}`,
               course: `${courseName}`,
 
+              canvas_assignment_id: assign.id,
+              canvas_course_id: courseId,
+
               title: assign.title,
               color: getCourseColor(courseId),
 
@@ -408,8 +411,28 @@ export default function MainPanel() {
                         <div style={{ flexGrow: 1 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div>
-                              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#111827' }}>{assignment.title}</h4>
-                              <p style={{ margin: 0, fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{assignment.course}</p>
+                          <h4 
+                              style={{ 
+                                margin: 0, 
+                                fontSize: '14px', 
+                                fontWeight: 'bold', 
+                                color: '#111827',
+                                cursor: 'pointer',
+                                transition: 'text-decoration 0.2s'
+                              }}
+                              className="hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation(); 
+
+                                const cID = assignment.canvas_course_id;
+                                const aID = assignment.canvas_assignment_id;
+
+                                window.open(`https://ufldev.instructure.com/courses/${cID}/assignments/${aID}`, '_blank');
+                              }}
+                            >
+                              {assignment.title}
+                            </h4>
+                                <p style={{ margin: 0, fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{assignment.course}</p>
                             </div>
                             <div style={{ color: '#9ca3af' }}>
                               {isExpanded ? <ChevronDown size={18} /> : <ChevronRightIcon size={18} />}

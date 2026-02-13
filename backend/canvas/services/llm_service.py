@@ -83,6 +83,7 @@ Respond ONLY in valid JSON using this structure:
             
             # add the due_at field
             if original:
+                llm_assign["id"] = original["id"]
                 llm_assign["due_at"] = original["due_at"]
                 
             enhanced_assignments.append(llm_assign)
