@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Box, Typography, Card, CardContent, IconButton, CircularProgress } from '@mui/material';
-import { ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, X, Sparkles } from 'lucide-react';
+import { Box, Typography, Card, CardContent, IconButton, CircularProgress, Collapse } from '@mui/material';
+import { ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, X, Sparkles, ChevronUp } from 'lucide-react';
 import TabSwitcher from './TabSwitcher';
 import TimerPanel from './TimerPanel';
 import { API_BASE_URL, FETCH_HEADERS } from '../../config.js';
@@ -37,6 +37,8 @@ export default function AssignmentDetailView({ initialAssignment }) {
   const [isLoading, setIsLoading] = useState(false);
 
   const [localAssignment, setLocalAssignment] = useState(initialAssignment || null);
+
+  const [expandedTasks, setExpandedTasks] = useState([]);
 
   const [scheduledTasks, setScheduledTasks] = useState(() => {
     const saved = localStorage.getItem('scheduledTasks');
@@ -90,10 +92,11 @@ export default function AssignmentDetailView({ initialAssignment }) {
 
           const formattedTasks = backendAssign.tasks.map((t, i) => ({
             id: `task-${assignmentId}-${i}`, 
-            label: t.description,
+            label: t.label,
             estTime: `${Math.round(t.estimated_time_hours * 60)}m`,
             completed: false,
-            aiSummary: t.ai_insight
+            aiSummary: t.ai_insight || null,
+            description: t.description || null,
           }));
 
           setTasks(formattedTasks);
@@ -150,6 +153,14 @@ export default function AssignmentDetailView({ initialAssignment }) {
     }));
   };
 
+  const toggleTaskExpansion = (taskId) => {
+    setExpandedTasks(prev => 
+      prev.includes(taskId) 
+        ? prev.filter(id => id !== taskId) 
+        : [...prev, taskId]
+    );
+  };
+
   if (isLoading && !localAssignment) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', py: 10 }}>
@@ -164,7 +175,7 @@ export default function AssignmentDetailView({ initialAssignment }) {
   }
 
   return (
-    <Box sx={{ height: '100%', overflowY: 'auto', pt: 1, pb: 8, pl: 2, pr: 2, maxWidth: '640px', mx: 'auto', bgcolor: '#fbfbfb' }}>
+    <Box sx={{ height: '100%', overflowY: 'auto', pt: 1, pb: 8, pl: 2, pr: 2, maxWidth: '640px', mx: 'auto' }}>
       
       {/* Header */}
       <Box sx={{ mb: 2 }}>
@@ -265,40 +276,83 @@ export default function AssignmentDetailView({ initialAssignment }) {
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
           ) : (
             <div className="space-y-3">
-              {tasks.map((task) => (
+              {tasks.map((task) => {
+              const isExpanded = expandedTasks.includes(task.id);
+              
+              return (
                 <Card 
                   key={task.id} 
                   draggable={true}
                   onDragStart={(e) => handleDragStart(e, task)} 
                   sx={{ 
-                    borderRadius: '12px', cursor: 'grab', boxShadow: 'none', border: '1px solid #e5e7eb',
+                    borderRadius: '12px', cursor: 'pointer', boxShadow: 'none', border: '1px solid #e5e7eb',
                     bgcolor: task.completed ? '#f9fafb' : 'white',
+                    transition: 'all 0.2s',
                     '&:hover': { borderColor: localAssignment?.color || '#3b82f6' }
                   }}
+                  onClick={() => toggleTaskExpansion(task.id)}
                 >
                   <CardContent sx={{ p: '12px 16px !important', display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-                      <div onClick={() => setTasks(tasks.map(t => t.id === task.id ? {...t, completed: !t.completed} : t))} className="cursor-pointer mt-1">
+                      
+                      {/* Checkbox */}
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTasks(tasks.map(t => t.id === task.id ? {...t, completed: !t.completed} : t));
+                        }} 
+                        className="cursor-pointer mt-1"
+                      >
                         {task.completed ? <CheckCircle2 size={20} className="text-green-500" /> : <Circle size={20} className="text-gray-300" />}
                       </div>
+
                       <Box sx={{ flexGrow: 1 }}>
-                        <div className="flex items-center gap-2">
-                          <Typography variant="body2" sx={{ fontWeight: 600, textDecoration: task.completed ? 'line-through' : 'none' }}>{task.label}</Typography>
-                          <span className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full">{task.estTime}</span>
+                        
+                        {/* Header Row: Label + Chevron */}
+                        <div className="flex items-center justify-between">
+                          <Typography variant="body2" sx={{ fontWeight: 600, textDecoration: task.completed ? 'line-through' : 'none', color: '#1f2937' }}>
+                            {task.label}
+                          </Typography>
+                          
+                          <div className="flex items-center gap-2">
+                             <span className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
+                                {task.estTime}
+                             </span>
+                             {/* Chevron rotates based on expanded state */}
+                             {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                          </div>
                         </div>
-                        {task.aiSummary && !task.completed && (
-                          <Box sx={{ mt: 1.5, p: 1.5, borderRadius: '8px', background: 'linear-gradient(135deg, #f5f3ff 0%, #f0f7ff 100%)', border: '1px solid #e0e7ff' }}>
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <Sparkles size={10} className="text-indigo-500" />
-                              <Typography sx={{ fontSize: '9px', fontWeight: 800, color: '#6366f1' }}>AI INSIGHT</Typography>
-                            </div>
-                            <Typography variant="caption" sx={{ color: '#4338ca', fontSize: '11px' }}>{task.aiSummary}</Typography>
+
+                        {/* Collapsible Content */}
+                        <Collapse in={isExpanded}>
+                          <Box sx={{ pt: 1.5 }}>
+                            {/* DESCRIPTION */}
+                            {task.description && (
+                              <Typography variant="caption" sx={{ display: 'block', mb: 1.5, color: '#4b5563', fontSize: '12px', lineHeight: 1.5 }}>
+                                {task.description}
+                              </Typography>
+                            )}
+
+                            {/* AI INSIGHT */}
+                            {task.aiSummary && !task.completed && (
+                              <Box sx={{ p: 1.5, borderRadius: '8px', background: 'linear-gradient(135deg, #f5f3ff 0%, #f0f7ff 100%)', border: '1px solid #e0e7ff' }}>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <Sparkles size={12} className="text-indigo-500" />
+                                  <Typography sx={{ fontSize: '10px', fontWeight: 800, color: '#6366f1', letterSpacing: '0.5px' }}>PRO TIP</Typography>
+                                </div>
+                                <Typography variant="caption" sx={{ color: '#4338ca', fontSize: '11px', lineHeight: 1.4, display: 'block' }}>
+                                  {task.aiSummary}
+                                </Typography>
+                              </Box>
+                            )}
                           </Box>
-                        )}
+                        </Collapse>
+
                       </Box>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
+              );
+            })}
+          </div>
           )}
         </>
       )}

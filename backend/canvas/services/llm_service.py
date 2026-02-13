@@ -41,6 +41,8 @@ For EACH assignment:
 - Break it into 3-5 concrete, actionable steps
 - Consider due dates and assignment weight
 - Assign a priority (High, Medium, Low)
+- If needed add a longer description for the task to clarify it further.
+- For EACH subtask, if needed for context, provide a 1-sentence 'ai_insight' which is a pro-tip, key concept, or helpful advice for that specific step.
 
 Respond ONLY in valid JSON using this structure:
 {{
@@ -50,8 +52,10 @@ Respond ONLY in valid JSON using this structure:
       "priority": "High | Medium | Low",
       "tasks": [
         {{
-          "description": ,
-          "estimated_time_hours":
+          "label": "Task description",
+          "estimated_time_hours": 1.5,
+          "description: "Optional longer description for the task",
+          "ai_insight": "The pro-tip or summary here"
         }},
       ]
     }}
