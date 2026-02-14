@@ -3,7 +3,7 @@ import { Box, Typography, Collapse, IconButton } from '@mui/material';
 import {Timer, BarChart3, ChevronLeft, ChevronRight, Sparkles, ChevronDown, ChevronRight as ChevronRightIcon, GripVertical, CheckCircle2, Circle, X} from 'lucide-react';
 import TabSwitcher from './TabSwitcher';
 import { API_BASE_URL, FETCH_HEADERS } from '../../config.js';
-
+import TimerPanel from './TimerPanel.jsx';
 const COURSE_COLORS = [
   '#3b82f6',
   '#8b5cf6',
@@ -513,10 +513,11 @@ export default function MainPanel() {
 
         {/* Placeholders for other tabs */}
         {currentTab === 'timer' && (
-          <Box sx={{ textAlign: 'center', p: 5, border: '2px dashed #e5e7eb', borderRadius: 4, mt: 4, bgcolor: 'white' }}>
-            <Timer className="mx-auto" size={40} color="#d1d5db" />
-            <Typography color="#9ca3af" fontWeight={500}>Focus Timer Ready</Typography>
-          </Box>
+          <TimerPanel />
+          // <Box sx={{ textAlign: 'center', p: 5, border: '2px dashed #e5e7eb', borderRadius: 4, mt: 4, bgcolor: 'white' }}>
+          //   <Timer className="mx-auto" size={40} color="#d1d5db" />
+          //   <Typography color="#9ca3af" fontWeight={500}>Focus Timer Ready</Typography>
+          // </Box>
         )}
 
         {currentTab === 'stats' && (

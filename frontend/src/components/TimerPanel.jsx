@@ -3,7 +3,7 @@ import trophyLogo from "../assets/trophy.svg"
 import coffeeLogo from  "../assets/coffee.svg" 
 import CountdownTimer from "./CountdownTimer";
 import { Brain } from "lucide-react";
-
+import ToggleTimer from "./ToggleTimer"
 export default function TimerPanel(){
     return(
         <div className="flex flex-col h-full px-1">
@@ -14,7 +14,14 @@ export default function TimerPanel(){
             </div>
 
             <div className="mb-4 shrink-0">
-                <CountdownTimer />
+                <div className="flex">
+                    <div className="mr-auto">Timer</div>
+                    <div><ToggleTimer /></div>
+                </div>
+                <div>
+                    <CountdownTimer />
+                </div>
+                
             </div>
 
             <div className="flex-grow overflow-y-auto space-y-3 pr-1 pb-4 custom-scrollbar">
