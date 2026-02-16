@@ -16,8 +16,16 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.http import HttpResponse
+from .auth_views import canvas_authorize_url, canvas_exchange, auth_me, auth_logout, auth_success
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("api/canvas/", include("canvas.urls")),
+    path("", lambda request: HttpResponse("Backend is running.")),
+    path("auth/canvas/authorize-url/", canvas_authorize_url),
+    path("auth/canvas/exchange/", canvas_exchange),
+    path("auth/me/", auth_me, name="auth-me"),
+    path("auth/logout/", auth_logout, name="auth-logout"),
+    path("auth/success/", auth_success, name="auth-success"),
 ]
