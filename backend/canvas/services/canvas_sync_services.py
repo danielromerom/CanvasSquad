@@ -44,18 +44,48 @@ def sync_assignments(course_canvas_id, course_name, raw_assignments):
 
 def generate_and_store_tasks(assignments):
     """
-    calls LLM to generate task suggestions for each assignment and stores the results in the DB.
+    Calls LLM to generate task suggestions for assignments that do not already have tasks, and stores results in DB.
     """
+
     if not assignments:
-        return []
+        return {"generated": 0, "skipped": 0}
 
-    #  llm call
-    llm_response = generate_task_suggestions(assignments)
+    # Filter assignments that already have tasks
+    assignments_to_generate = []
+    skipped = 0
 
-    # Loop through assignments returned from LLM
+    for assignment in assignments:
+        # assignment can be a model instance OR dict
+        assignment_id = assignment.id if hasattr(assignment, "id") else assignment.get("id")
+
+        try:
+            assignment_obj = Assignment.objects.get(id=assignment_id)
+        except Assignment.DoesNotExist:
+            continue
+
+        if assignment_obj.tasks.exists():
+            skipped += 1
+            continue
+
+        assignments_to_generate.append({
+            "id": assignment_obj.id,
+            "title": assignment_obj.title,
+            "due_at": assignment_obj.due_at,
+            "points": assignment_obj.points_possible,
+            "description": assignment_obj.description,
+        })
+
+    #  Nothing new → no LLM call
+    if not assignments_to_generate:
+        return {"generated": 0, "skipped": skipped}
+
+    # Call LLM only once
+    llm_response = generate_task_suggestions(assignments_to_generate)
+
+    generated = 0
+
+    # Store results
     for llm_assign in llm_response.get("assignments", []):
-        # Get the DB assignment
-        # We use the DB id (not canvas_assignment_id) because that's what we sent to the LLM in the first place.
         assignment_id = llm_assign.get("id")
         if not assignment_id:
             continue
@@ -65,7 +95,10 @@ def generate_and_store_tasks(assignments):
         except Assignment.DoesNotExist:
             continue
 
-        # create a TaskGeneration record for this run (one per assignment)
+        # check if tasks exist 
+        if assignment_obj.tasks.exists():
+            continue
+
         task_gen = TaskGeneration.objects.create(
             assignment=assignment_obj,
             model_name="gpt-oss-120b",
@@ -73,16 +106,19 @@ def generate_and_store_tasks(assignments):
             raw_response=llm_assign
         )
 
-        # creating Task records for each suggested task from the LLM 
         for order, task in enumerate(llm_assign.get("tasks", []), start=1):
             Task.objects.create(
                 assignment=assignment_obj,
                 generation=task_gen,
                 title=task.get("label", f"Task {order}"),
                 estimated_minutes=int(task.get("estimated_time_hours", 0) * 60),
-                priority=task.get("priority", "Medium"),
+                priority=llm_assign.get("priority", "Medium"),
                 order=order
             )
 
-    return True
+        generated += 1
 
+    return {
+        "generated": generated,
+        "skipped": skipped
+    }
