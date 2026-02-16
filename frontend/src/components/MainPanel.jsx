@@ -514,10 +514,6 @@ export default function MainPanel() {
         {/* Placeholders for other tabs */}
         {currentTab === 'timer' && (
           <TimerPanel />
-          // <Box sx={{ textAlign: 'center', p: 5, border: '2px dashed #e5e7eb', borderRadius: 4, mt: 4, bgcolor: 'white' }}>
-          //   <Timer className="mx-auto" size={40} color="#d1d5db" />
-          //   <Typography color="#9ca3af" fontWeight={500}>Focus Timer Ready</Typography>
-          // </Box>
         )}
 
         {currentTab === 'stats' && (
