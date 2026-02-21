@@ -120,8 +120,9 @@ export default function MainPanel() {
 
       const hydrated = await Promise.all(filtered.map(async (assign) => {
           let tasks = [];
+          const taskIdToUse = assign.canvas_assignment_id || assign.id; 
+
           try {
-              const taskIdToUse = assign.canvas_assignment_id || assign.id; 
               const taskRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${taskIdToUse}/tasks/`, { headers: FETCH_HEADERS });
               if (taskRes.ok) {
                   const taskData = await taskRes.json();
@@ -141,7 +142,7 @@ export default function MainPanel() {
               raw_due_at: assign.due_at,
               due: new Date(assign.due_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute:'2-digit' }),
               tasks: tasks.map((t) => {
-                  const frontendTaskId = `task-${assign.id}-${t.id}`;
+                  const frontendTaskId = `task-${taskIdToUse}-${t.id}`;
                   return {
                       id: frontendTaskId,
                       label: t.title,
@@ -192,43 +193,52 @@ export default function MainPanel() {
       window.open(`https://ufldev.instructure.com/courses/${cID}/assignments/${aID}`, '_blank');
   };
 
-  const toggleAssignmentTask = (assignmentId, taskId) => {
-    let isCurrentlyCompleted = false;
+  const toggleAssignmentTask = (_, taskId) => {
+    
+    setAssignments(prevAssignments => {
+      return prevAssignments.map(assign => ({
+        ...assign,
+        tasks: assign.tasks.map(t => {
+          if (t.id === taskId) {
+            return { ...t, completed: !t.completed }; 
+          }
+          return t;
+        })
+      }));
+    });
 
-    for (const assign of assignments) {
-      const foundTask = assign.tasks.find(t => t.id === taskId);
-      if (foundTask) {
-        isCurrentlyCompleted = foundTask.completed;
-        break;
-      }
-    }
-
-    if (!isCurrentlyCompleted) {
-      for (const date of Object.values(scheduledTasks)) {
-        const found = date.find(t => t.id === taskId);
-        if (found && found.completed) {
-          isCurrentlyCompleted = true;
+    setScheduledTasks(prevSchedule => {
+      const newState = { ...prevSchedule };
+      
+      let isTaskCurrentlyCompleted = false;
+      for (const date of Object.values(prevSchedule)) {
+        const found = date.find(task => task.id === taskId);
+        if (found) {
+          isTaskCurrentlyCompleted = found.completed;
           break;
         }
       }
-    }
+      if (!isTaskCurrentlyCompleted) {
+        for (const assign of assignments) {
+          const foundInList = assign.tasks.find(t => t.id === taskId);
+          if (foundInList) {
+              isTaskCurrentlyCompleted = foundInList.completed;
+              break;
+          }
+        }
+      }
 
-    const newCompletedState = !isCurrentlyCompleted;
+      const exactNewState = !isTaskCurrentlyCompleted;
 
-    setAssignments(prev => prev.map(assign => ({
-      ...assign,
-      tasks: assign.tasks.map(task => 
-        task.id === taskId ? { ...task, completed: newCompletedState } : task
-      )
-    })));
-
-    setScheduledTasks(prev => {
-      const newState = { ...prev };
       Object.keys(newState).forEach(dateStr => {
-        newState[dateStr] = newState[dateStr].map(task => 
-          task.id === taskId ? { ...task, completed: newCompletedState } : task
-        );
+        newState[dateStr] = newState[dateStr].map(t => {
+          if (t.id === taskId) {
+            return { ...t, completed: exactNewState };
+          }
+          return t;
+        });
       });
+      
       return newState;
     });
   };

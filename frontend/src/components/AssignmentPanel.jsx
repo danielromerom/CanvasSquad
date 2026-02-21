@@ -194,7 +194,6 @@ export default function AssignmentDetailView({ initialAssignment }) {
     });
   };
 
-  // Upgraded Toggle Sync for both List and Calendar
   const toggleTask = (_, taskId) => {
     setTasks(prev => prev.map(t => 
       t.id === taskId ? { ...t, completed: !t.completed } : t
