@@ -1,6 +1,6 @@
 import ToggleTimer from "./ToggleTimer"
-export default function TimerPanel({taskId}){
-    console.log("task")
+export default function TimerPanel(){
+    
     return(
         <div className="flex flex-col h-full px-1">
             

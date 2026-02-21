@@ -8,8 +8,6 @@ export default function ToggleTimer(){
     const [isOpen, setIsOpen] = useState(false)
     const [currentLogo, setCurrentLogo] = useState(<Brain size={16} className=""/>) 
     const [sessionMinutes, setSessionMinutes] = useState(25)
- 
-    // <div><Brain size={16} className=""/></div>
     
     function handleDropDown(){
         setIsOpen(isOpen => !isOpen)
