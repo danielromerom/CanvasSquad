@@ -1,4 +1,5 @@
 # cleaning up assignment data for further processing
+# not being used rn 
 def normalize_assignments(assignments):
     return [
         {
