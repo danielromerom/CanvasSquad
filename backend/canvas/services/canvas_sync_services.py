@@ -42,7 +42,7 @@ def sync_assignments(course_canvas_id, course_name, raw_assignments):
     return normalized_assignments
 
 
-def generate_and_store_tasks(assignments):
+def generate_and_store_tasks(assignments, force=False):
     """
     Calls LLM to generate task suggestions for assignments that do not already have tasks, and stores results in DB.
     """
@@ -64,8 +64,12 @@ def generate_and_store_tasks(assignments):
             continue
 
         if assignment_obj.tasks.exists():
-            skipped += 1
-            continue
+            if force:
+                # If froce is true, we delete and rebuild (regen button)
+                assignment_obj.tasks.all().delete()
+            else:
+                skipped += 1
+                continue
 
         assignments_to_generate.append({
             "id": assignment_obj.id,
@@ -113,7 +117,9 @@ def generate_and_store_tasks(assignments):
                 title=task.get("label", f"Task {order}"),
                 estimated_minutes=int(task.get("estimated_time_hours", 0) * 60),
                 priority=llm_assign.get("priority", "Medium"),
-                order=order
+                order=order,
+                description=task.get("description", ""), 
+                ai_insight=task.get("ai_insight", "")
             )
 
         generated += 1

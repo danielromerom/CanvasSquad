@@ -1,6 +1,8 @@
+from http import client
 from django.shortcuts import render
 from django.shortcuts import get_object_or_404
 from django.conf import settings
+from requests import request
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -10,7 +12,7 @@ from .services.canvas_sync_services import generate_and_store_tasks, sync_assign
 
 
 class CoursesView(APIView):
-    def post(self, request):
+    def get(self, request):
         client = CanvasClient(
             settings.CANVAS_BASE_URL,
             settings.CANVAS_ACCESS_TOKEN
@@ -19,21 +21,20 @@ class CoursesView(APIView):
         courses_raw = client.list_courses()
         saved_courses = []
 
-        # Sync courses with our database and return the list of courses
         for c in courses_raw:
             course, _ = Course.objects.update_or_create(
                 canvas_course_id=c["id"],
-                defaults={
-                    "name": c.get("name"),
-                    "course_code": c.get("course_code", "")
-                }
-            )
+                    defaults={
+                        "name": c.get("name"),
+                        "course_code": c.get("course_code", "")
+                    }
+                )
             saved_courses.append(course)
 
-        return Response({
-            "count": len(saved_courses),
-            "courses": courses_raw
-        })
+            return Response({
+                "count": len(saved_courses),
+                "courses": courses_raw
+            })
 
 class CourseAssignmentsView(APIView):
     """
@@ -50,6 +51,7 @@ class CourseAssignmentsView(APIView):
 
         assignments = course.assignments.all().values(
             "id",
+            "canvas_assignment_id",
             "title",
             "description",
             "due_at",
@@ -67,6 +69,8 @@ class CourseAssignmentsView(APIView):
 
 class CourseSyncView(APIView):
     def post(self, request, course_id):
+        force_update = request.data.get("force", False)
+
         client = CanvasClient(settings.CANVAS_BASE_URL, settings.CANVAS_ACCESS_TOKEN)
         raw_assignments = client.list_assignments(course_id)
         course_data = client.get_course(course_id)
@@ -81,13 +85,14 @@ class CourseSyncView(APIView):
         )
 
         # Generate tasks via LLM
-        generate_and_store_tasks(assignments)
+        generate_and_store_tasks(assignments, force_update)
 
         return Response({
             "course_id": course_id,
             "course_name": course_name,
             "assignment_count": len(assignments),
-            "message": "Assignments synced and tasks generated successfully"
+            "message": "Assignments synced and tasks generated successfully",
+            "forced": force_update
         })
 
     
@@ -111,6 +116,8 @@ class AssignmentTasksView(APIView):
             "priority",
             "order",
             "is_completed",
+            "description",
+            "ai_insight"
         )
 
         return Response({

@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Box, Typography, Collapse, IconButton } from '@mui/material';
 import {Timer, BarChart3, ChevronLeft, ChevronRight, Sparkles, ChevronDown, ChevronRight as ChevronRightIcon, GripVertical, CheckCircle2, Circle, X} from 'lucide-react';
 import TabSwitcher from './TabSwitcher';
 import { API_BASE_URL, FETCH_HEADERS } from '../../config.js';
+import WeeklyCalendar from './WeeklyCalendar';
 import TimerPanel from './TimerPanel.jsx';
 const COURSE_COLORS = [
   '#3b82f6',
@@ -16,15 +17,24 @@ const COURSE_COLORS = [
 
 const getCourseColor = (id) => {
   const numId = parseInt(id, 10) || 0;
-  return COURSE_COLORS[numId % COURSE_COLORS.length];
+  
+  const phi = 0.618033988749895;
+  const index = Math.floor((numId * phi % 1) * COURSE_COLORS.length);
+  
+  return COURSE_COLORS[index];
 };
 
 export default function MainPanel() {
   const [currentTab, setCurrentTab] = useState('schedule');
-  const [currentDate, setCurrentDate] = useState(new Date());
 
+  const [assignmentStartDate, setAssignmentStartDate] = useState(new Date());
+  const [assignmentTimeframe, setAssignmentTimeframe] = useState(7);
+
+  const [allRawAssignments, setAllRawAssignments] = useState([]);
   const [assignments, setAssignments] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isAssignmentsLoading, setIsAssignmentsLoading] = useState(true);
 
   const [expandedIds, setExpandedIds] = useState([]); 
   const [scheduledTasks, setScheduledTasks] = useState(() => {
@@ -39,115 +49,136 @@ export default function MainPanel() {
   }, [scheduledTasks]);
 
   useEffect(() => {
-    const fetchAllData = async () => {
+    const fetchInitial = async () => {
+      setIsInitialLoading(true);
       try {
-        
-        const coursesResponse = await fetch(`${API_BASE_URL}/api/canvas/courses/`, { headers: FETCH_HEADERS}); 
+        const coursesResponse = await fetch(`${API_BASE_URL}/api/canvas/courses/`, { headers: FETCH_HEADERS });
         const coursesData = await coursesResponse.json();
-
         const courseList = coursesData.courses || [];
 
-        // fetch Assignments for each course in parallel
-        const promises = courseList.map(course => 
-          fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/assignments/`, { headers: FETCH_HEADERS })
-            .then(res => {
-                if (!res.ok) return null;
-                return res.json();
-            })
-            .then(assignmentData => {
-                if (assignmentData) {
-                    assignmentData.course_name = course.course_code || course.name; 
-                }
-                return assignmentData;
+        const syncPromises = courseList.map(course => 
+            fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/sync/`, { 
+                method: 'POST', 
+                headers: FETCH_HEADERS 
             })
         );
+        await Promise.all(syncPromises);
 
-        const results = await Promise.all(promises);
+        // fetch all assignments for all courses
+        const assignmentPromises = courseList.map(async (course) => {
+          const res = await fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/assignments/`, { headers: FETCH_HEADERS });
+          if (!res.ok) return [];
+          const data = await res.json();
+          
+          return data.assignments.map(a => ({
+            ...a,
+            course_name: course.name || course.course_code,
+            course_id: course.id
+          }));
+        });
 
-        const now = new Date();
-        const nextWeek = new Date();
-        nextWeek.setDate(now.getDate() + 7);
-
-        const allAssignments = results
-          .filter(data => data !== null)
-          .flatMap(data => {
-            const courseId = data.course_id;
-            const backendAssignments = data.tasks.assignments;
-            const courseName = data.course_name;
-
-            // Filter individual assignments b4 mapping
-            const filteredBackend = backendAssignments.filter(assign => {
-                if (!assign.due_at) return false;
-                const dueDate = new Date(assign.due_at);
-
-                return dueDate >= now && dueDate <= nextWeek;
-            });
-
-            // Map to UI structure
-            return filteredBackend.map((assign, index) => ({
-              id: `assign-${courseId}-${index}`,
-              course: `${courseName}`,
-
-              canvas_assignment_id: assign.id,
-              canvas_course_id: courseId,
-
-              title: assign.title,
-              color: getCourseColor(courseId),
-
-              due: new Date(assign.due_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute:'2-digit' }),
-              priority: assign.priority,
-              tasks: assign.tasks.map((t, tIndex) => ({
-                id: `task-${courseId}-${index}-${tIndex}`,
-                label: t.description,
-                time: `${t.estimated_time_hours}h`,
-                completed: false
-              }))
-            }));
-          });
-
-        setAssignments(allAssignments);
-        setIsLoading(false);
+        const nestedAssignments = await Promise.all(assignmentPromises);
+        setAllRawAssignments(nestedAssignments.flat());
 
       } catch (error) {
-        console.error("Failed to fetch assignments:", error);
-        setIsLoading(false);
+        console.error("Failed to fetch initial data:", error);
+      } finally {
+        setIsInitialLoading(false);
       }
     };
 
-    fetchAllData();
-    }, []);
+    fetchInitial();
+  }, []);
 
-  // date utilities
-  const getWeekDates = (baseDate) => {
-    const dates = [];
-    const current = new Date(baseDate);
-    const day = current.getDay();
-    const diff = current.getDate() - day + (day === 0 ? -6 : 1); 
-    const monday = new Date(current.setDate(diff));
+  useEffect(() => {
+    const filterAndHydrate = async () => {
+      if (isInitialLoading) return;
+      setIsAssignmentsLoading(true);
 
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      dates.push(d);
-    }
-    return dates;
+      // date boundaries based on state
+      const start = new Date(assignmentStartDate);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(start);
+      end.setDate(end.getDate() + assignmentTimeframe - 1);
+      end.setHours(23, 59, 59, 999);
+
+      // filter within the timeframe
+      const filtered = allRawAssignments.filter(assign => {
+        if (!assign.due_at) return false;
+        const dueDate = new Date(assign.due_at);
+        return dueDate >= start && dueDate <= end;
+      });
+
+      // sort by due date ascending
+      filtered.sort((a, b) => new Date(a.due_at) - new Date(b.due_at));
+
+      const locallyCompletedIds = new Set();
+      Object.values(scheduledTasks).flat().forEach(t => {
+          if (t.completed) locallyCompletedIds.add(t.id);
+      });
+
+      const hydrated = await Promise.all(filtered.map(async (assign) => {
+          let tasks = [];
+          try {
+              const taskIdToUse = assign.canvas_assignment_id || assign.id; 
+              const taskRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${taskIdToUse}/tasks/`, { headers: FETCH_HEADERS });
+              if (taskRes.ok) {
+                  const taskData = await taskRes.json();
+                  tasks = taskData.tasks || [];
+              }
+          } catch (err) {
+              console.warn(`Could not fetch tasks for assignment ${assign.id}`, err);
+          }
+
+          return {
+              id: `assign-${assign.course_id}-${assign.id}`,
+              course: assign.course_name,
+              canvas_assignment_id: assign.canvas_assignment_id,
+              canvas_course_id: assign.course_id,
+              title: assign.title,
+              color: getCourseColor(assign.course_id),
+              raw_due_at: assign.due_at,
+              due: new Date(assign.due_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute:'2-digit' }),
+              tasks: tasks.map((t) => {
+                  const frontendTaskId = `task-${assign.id}-${t.id}`;
+                  return {
+                      id: frontendTaskId,
+                      label: t.title,
+                      time: t.estimated_minutes ? `${t.estimated_minutes}m` : '15m', 
+
+                      completed: t.is_completed || locallyCompletedIds.has(frontendTaskId)
+                  };
+              })
+          };
+      }));
+
+      setAssignments(hydrated);
+      setIsAssignmentsLoading(false);
+    };
+
+    filterAndHydrate();
+  }, [allRawAssignments, assignmentStartDate, assignmentTimeframe, isInitialLoading, scheduledTasks]);
+
+  // assignment date navigation handlers
+  const moveAssignmentDate = (direction) => {
+    const newDate = new Date(assignmentStartDate);
+    newDate.setDate(newDate.getDate() + (direction * assignmentTimeframe));
+    setAssignmentStartDate(newDate);
   };
 
-  const weekDates = useMemo(() => getWeekDates(currentDate), [currentDate]);
-
-  const changeWeek = (direction) => {
-    const newDate = new Date(currentDate);
-    newDate.setDate(currentDate.getDate() + (direction * 7));
-    setCurrentDate(newDate);
+  const resetAssignmentDate = () => {
+    setAssignmentStartDate(new Date());
   };
 
-  const isToday = (date) => {
-    const today = new Date();
-    return date.getDate() === today.getDate() &&
-           date.getMonth() === today.getMonth() &&
-           date.getFullYear() === today.getFullYear();
-  };
+  const assignmentEndText = useMemo(() => {
+    const end = new Date(assignmentStartDate);
+    end.setDate(end.getDate() + assignmentTimeframe - 1);
+    return end;
+  }, [assignmentStartDate, assignmentTimeframe]);
 
+  const dateRangeText = `${assignmentStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${assignmentEndText.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  
   // handler for accordion assignment
   const toggleAccordion = (id) => {
     setExpandedIds(prev => 
@@ -155,9 +186,15 @@ export default function MainPanel() {
     );
   };
 
+  const openAssignmentLink = (assign) => {
+      const cID = assign.canvas_course_id;
+      const aID = assign.canvas_assignment_id;
+      window.open(`https://ufldev.instructure.com/courses/${cID}/assignments/${aID}`, '_blank');
+  };
+
   const toggleAssignmentTask = (assignmentId, taskId) => {
     setAssignments(prev => prev.map(assign => {
-      if (assign.id !== assignmentId) return assign;
+      if (assignmentId && assign.id !== assignmentId) return assign;
       return {
         ...assign,
         tasks: assign.tasks.map(task => 
@@ -165,6 +202,16 @@ export default function MainPanel() {
         )
       };
     }));
+
+    setScheduledTasks(prev => {
+      const newState = { ...prev };
+      Object.keys(newState).forEach(dateStr => {
+        newState[dateStr] = newState[dateStr].map(task => 
+          task.id === taskId ? { ...task, completed: !task.completed } : task
+        );
+      });
+      return newState;
+    });
   };
   
   // drag and drop
@@ -175,21 +222,9 @@ export default function MainPanel() {
     e.dataTransfer.setData("text/plain", JSON.stringify({ ...task, color: courseColor }));
   };
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = "move";
-  };
-
-  const handleDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e, dateStr) => {
+  const handleDropOnCalendar = (e, dateStr) => {
     e.preventDefault();
     e.stopPropagation(); 
-
     const task = draggedTaskRef.current;
     
     if (task) {
@@ -198,10 +233,8 @@ export default function MainPanel() {
         Object.keys(newState).forEach(key => {
             newState[key] = newState[key].filter(t => t.id !== task.id);
         });
-
         const currentDayTasks = newState[dateStr] || [];
         newState[dateStr] = [...currentDayTasks, task];
-
         return newState;
       });
     }
@@ -217,6 +250,72 @@ export default function MainPanel() {
       ...prev,
       [dateStr]: prev[dateStr].filter(t => t.id !== taskId)
     }));
+  };
+
+  const handleClearDay = (dateStr) => {
+    setScheduledTasks(prev => {
+      const newState = { ...prev };
+      delete newState[dateStr];
+      return newState;
+    });
+  };
+
+  const handleAutoSchedule = () => {
+    const alreadyScheduledIds = new Set();
+    Object.values(scheduledTasks).flat().forEach(t => alreadyScheduledIds.add(t.id));
+
+    const newSchedule = { ...scheduledTasks };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let tasksScheduled = 0;
+
+    // Process tasks grouped BY ASSIGNMENT so we preserve chronological order
+    assignments.forEach(assign => {
+      // Get strictly the unscheduled tasks for THIS assignment
+      const pendingTasks = assign.tasks.filter(task => !task.completed && !alreadyScheduledIds.has(task.id));
+      if (pendingTasks.length === 0) return;
+
+      // Determine valid days: From Today until the day BEFORE it's due
+      const validDays = [];
+      let currentDate = new Date(today);
+      const dueDate = new Date(assign.raw_due_at);
+      dueDate.setHours(0, 0, 0, 0);
+
+      // If it's due today or overdue, all tasks must be scheduled today
+      if (dueDate <= today) {
+          validDays.push(new Date(today));
+      } else {
+          // Otherwise, collect every day from today until the deadline
+          while (currentDate < dueDate) {
+              validDays.push(new Date(currentDate));
+              currentDate.setDate(currentDate.getDate() + 1);
+          }
+      }
+
+      // Distribute tasks chronologically across the available days
+      pendingTasks.forEach((task, index) => {
+        // Math magic to evenly space steps. 
+        // e.g., 4 tasks over 3 days maps to: Day 1, Day 1, Day 2, Day 3
+        const dayIndex = Math.floor((index / pendingTasks.length) * validDays.length);
+        const scheduledDay = validDays[dayIndex];
+        const dateStr = scheduledDay.toDateString();
+
+        if (!newSchedule[dateStr]) newSchedule[dateStr] = [];
+        newSchedule[dateStr].push({
+          ...task,
+          color: assign.color
+        });
+        
+        tasksScheduled++;
+      });
+    });
+
+    if (tasksScheduled === 0) {
+      alert("All active tasks are already scheduled!");
+    } else {
+      setScheduledTasks(newSchedule);
+    }
   };
   
   return (
@@ -236,165 +335,86 @@ export default function MainPanel() {
         
         {currentTab === 'schedule' && (
           <>
-            {/* week nav. */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, px: 1 }}>
-              <Typography variant="h6" fontWeight="bold" color="#111827">
-                {weekDates[0].toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <IconButton onClick={() => changeWeek(-1)} size="small"><ChevronLeft size={20} /></IconButton>
+            <WeeklyCalendar 
+              scheduledTasks={scheduledTasks}
+              onDropTask={handleDropOnCalendar}
+              onRemoveTask={removeTaskFromDay}
+              onToggleTask={toggleAssignmentTask}
+              onClearDay={handleClearDay}
+            />
+
+            <Box sx={{ mb: 2 }}>
+                
+              {/* Header Row */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                
+                {/* Title and Date Grouped Together */}
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5 }}>
+                  <Typography variant="subtitle1" fontWeight="bold" color="#1f2937" sx={{ lineHeight: 1 }}>
+                    Assignments
+                  </Typography>
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: '#9ca3af', lineHeight: 1 }}>
+                    {dateRangeText}
+                  </Typography>
+                </Box>
+
                 <button 
-                    onClick={() => setCurrentDate(new Date())} 
-                    style={{ background: '#e0e7ff', color: '#4f46e5', border: 'none', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
-                >
-                    Today
+                onClick={handleAutoSchedule}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#000', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}>
+                  <Sparkles size={12} /> Auto
                 </button>
-                <IconButton onClick={() => changeWeek(1)} size="small"><ChevronRight size={20} /></IconButton>
               </Box>
-            </Box>
 
-            {/* calendar grid */}
-            <Box sx={{ 
-                display: 'flex', 
-                gridTemplateColumns: 'repeat(7, 1fr)', 
-                gap: 1, 
-                mb: 4 
-            }}>
-              {weekDates.map((date) => {
-                const dateStr = date.toDateString();
-                const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-                const dayNum = date.getDate();
-                const tasksForDay = scheduledTasks[dateStr] || [];
-                const isTodayDate = isToday(date);
+              {/* Date Range Text */}
+              
 
-                return (
-                  <Box 
-                    key={dateStr}
-                    onDragOver={handleDragOver}
-                    onDragEnter={handleDragEnter}
-                    onDrop={(e) => handleDrop(e, dateStr)}
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      pt: 1.5,
-                      pb: 1,
-                      borderRadius: '12px',
-                      border: isTodayDate ? '1px solid #c7d2fe' : '1px solid #e5e7eb',
-                      backgroundColor: isTodayDate ? '#eef2ff' : '#fff',
-                      minHeight: '120px',
-                      overflow: 'hidden',
-                      flex: 1, 
-                      minWidth: 0,
-                      transition: 'flex 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), background-color 0.2s', 
-                      cursor: 'default',
-                      '&:hover': {
-                        flex: 6,
-                        zIndex: 10,
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
-                      }
-                    }}
+              {/* Navigation Bar */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  
+                {/* Timeframe Dropdown */}
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <select 
+                     value={assignmentTimeframe} 
+                     onChange={(e) => setAssignmentTimeframe(Number(e.target.value))}
+                     style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '4px 6px', fontSize: '12px', background: 'white', color: '#374151', cursor: 'pointer', outline: 'none', fontWeight: 500 }}
                   >
-                    <Typography variant="caption" sx={{ pointerEvents: 'none', fontWeight: 'bold', textTransform: 'uppercase', color: isTodayDate ? '#4f46e5' : '#9ca3af', fontSize: '10px' }}>
-                      {dayName}
-                    </Typography>
-                    <Typography variant="body2" sx={{ pointerEvents: 'none', fontWeight: 'bold', mb: 1, color: isTodayDate ? '#4338ca' : '#374151' }}>
-                      {dayNum}
-                    </Typography>
+                     <option value={3}>Next 3 Days</option>
+                     <option value={7}>Next 7 Days</option>
+                     <option value={14}>Next 14 Days</option>
+                     <option value={30}>Next 30 Days</option>
+                  </select>
+                </Box>
 
-                    {/* Dropped Tasks */}
-                    <Box sx={{
-                        width: '100%',
-                        px: 0.5,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 0.5,
-                        flexGrow: 1, 
-                        overflowY: 'auto',
-                        minHeight: 0,
-                        '::-webkit-scrollbar': { display: 'none' } 
-                    }}>
-                      {tasksForDay.map((task) => (
-                        <Box 
-                          key={task.id}
-                          className="group" // Enables hover effects for child
-                          onClick={(e) => {
-                            e.stopPropagation(); 
-                          }}
-                          sx={{
-                              bgcolor: 'white',
-                              border: '1px solid #f3f4f6',
-                              borderRadius: '4px',
-                              borderColor: task.completed ? '#e5ebe5' : '#f3f4f6',
-                              p: 0.5,
-                              cursor: 'pointer',
-                              borderLeft: `3px solid ${task.color}`,
-                              fontSize: '9px',
-                              fontWeight: 500,
-                              color: task.completed ? '#9ca3af' : '#374151',
-                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                              position: 'relative',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 0.5,
-                              opacity: task.completed ? 0.7 : 1,
-                              textDecoration: task.completed ? 'line-through' : 'none',
-                              '&:hover .remove-btn': { display: 'flex' }
-                          }}
-                        >
-                          
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {task.label}
-                          </span>
+                {/* Arrows */}
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <IconButton onClick={() => moveAssignmentDate(-1)} size="small" sx={{ p: 0.5, bgcolor: 'white', border: '1px solid #e5e7eb' }}><ChevronLeft size={16} /></IconButton>
+                  <button 
+                      onClick={resetAssignmentDate} 
+                      style={{ background: '#e0e7ff', color: '#4f46e5', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
+                  >
+                      Today
+                  </button>
+                  <IconButton onClick={() => moveAssignmentDate(1)} size="small" sx={{ p: 0.5, bgcolor: 'white', border: '1px solid #e5e7eb' }}><ChevronRight size={16} /></IconButton>
+                </Box>
+              </Box>
 
-                          <Box 
-                            className="remove-btn" 
-                            onClick={(e) => {
-                                e.stopPropagation(); 
-                                removeTaskFromDay(dateStr, task.id);
-                            }}
-                            sx={{
-                               display: 'none',
-                               position: 'absolute',
-                               right: 2,
-                               top: '50%',
-                               transform: 'translateY(-50%)',
-                               bgcolor: '#fff',
-                               borderRadius: '50%',
-                               p: 0.5,
-                               boxShadow: 1
-                            }}
-                          >
-                            <X size={10} color="#ef4444" />
-                          </Box>
-                        </Box>
-                      ))}
-                    </Box>
-                  </Box>
-                );
-              })}
             </Box>
 
-            {/* Assignments */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="subtitle1" fontWeight="bold" color="#1f2937">Assignments</Typography>
-              <button style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#000', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}>
-                <Sparkles size={12} /> Auto
-              </button>
-            </Box>
 
-            {isLoading ? (
+            {isInitialLoading || isAssignmentsLoading ? (
                <Box sx={{ textAlign: 'center', py: 4 }}>
                  <Typography variant="body2" color="text.secondary">Loading your assignments...</Typography>
                </Box>
             ) : assignments.length === 0 ? (
                <Box sx={{ textAlign: 'center', py: 4 }}>
-                 <Typography variant="body2" color="text.secondary">No assignments due in the next 7 days! 🎉</Typography>
+                 <Typography variant="body2" color="text.secondary">No assignments due in this timeframe! 🎉</Typography>
                </Box>
             ) : (
               assignments.map((assignment) => {
                   const isExpanded = expandedIds.includes(assignment.id);
                   const totalSubtasks = assignment.tasks.length;
+                  const hasTasks = totalSubtasks > 0;
+
                   let scheduledCount = 0;
                   Object.values(scheduledTasks).flat().forEach(t => { if (assignment.tasks.some(at => at.id === t.id)) scheduledCount++; });
 
@@ -403,10 +423,10 @@ export default function MainPanel() {
                       
                       {/* Accordion Header */}
                       <div 
-                        onClick={() => toggleAccordion(assignment.id)}
+                        onClick={() => hasTasks ? toggleAccordion(assignment.id) : null}
                         style={{ padding: '16px', display: 'flex', gap: '12px', cursor: 'pointer' }}
                       >
-                        <div style={{ width: '4px', height: '40px', backgroundColor: assignment.color, borderRadius: '4px' }} />
+                        <div style={{ width: '4px', height: '40px', backgroundColor: assignment.color, borderRadius: '4px', flexShrink: 0}} />
                         
                         <div style={{ flexGrow: 1 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -421,28 +441,32 @@ export default function MainPanel() {
                                 transition: 'text-decoration 0.2s'
                               }}
                               className="hover:underline"
-                              onClick={(e) => {
-                                e.stopPropagation(); 
-
-                                const cID = assignment.canvas_course_id;
-                                const aID = assignment.canvas_assignment_id;
-
-                                window.open(`https://ufldev.instructure.com/courses/${cID}/assignments/${aID}`, '_blank');
-                              }}
+                              onClick={(e) => { e.stopPropagation(); openAssignmentLink(assignment); }}
                             >
                               {assignment.title}
                             </h4>
                                 <p style={{ margin: 0, fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{assignment.course}</p>
                             </div>
                             <div style={{ color: '#9ca3af' }}>
-                              {isExpanded ? <ChevronDown size={18} /> : <ChevronRightIcon size={18} />}
-                            </div>
+                              {hasTasks ? (
+                                  isExpanded ? <ChevronDown size={18} /> : <ChevronRightIcon size={18} />
+                              ) : (
+                                  <div 
+                                    onClick={(e) => { e.stopPropagation(); openAssignmentLink(assignment); }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#2563eb', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', background: '#eff6ff', padding: '4px 8px', borderRadius: '6px' }}
+                                  >
+                                    <Sparkles size={12} />
+                                    <span>Generate Plan</span>
+                                  </div>
+                              )}                            </div>
                           </div>
                           <div style={{ marginTop: '4px', display: 'flex', gap: '12px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
                             <span>Due: {assignment.due}</span>
-                            <span style={{ color: scheduledCount === totalSubtasks ? '#16a34a' : '#9ca3af' }}>
-                              {scheduledCount}/{totalSubtasks} scheduled
-                            </span>
+                            {hasTasks && (
+                                <span style={{ color: scheduledCount === totalSubtasks ? '#16a34a' : '#9ca3af' }}>
+                                    {scheduledCount}/{totalSubtasks} scheduled
+                                </span>
+                            )}
                           </div>
                         </div>
                       </div>

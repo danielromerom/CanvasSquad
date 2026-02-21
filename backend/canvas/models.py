@@ -108,6 +108,8 @@ class Task(models.Model):
     order = models.PositiveIntegerField()
     is_completed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    description = models.TextField(blank=True, null=True)
+    ai_insight = models.TextField(blank=True, null=True)
 
     # Meta class to define default ordering of tasks by their order field
     class Meta:
