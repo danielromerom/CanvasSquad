@@ -22,7 +22,7 @@ export default function Timer({seconds, tensSeconds, minutes, currentSession}){
 
     function longSession(){
         return(
-             <div className="w-full bg-gradient-to-br from-fuchsia-500 to-pink-500 rounded-2xl p-6 text-black text-center shadow-lg relative overflow-hidden mb-4 -z-10">
+             <div className="bg-gradient-to-br from-fuchsia-500 to-pink-500 rounded-2xl p-6 text-black text-center shadow-lg relative overflow-hidden mb-4 -z-10">
             
             <div className="relative z-10 flex flex-col items-center">
 
@@ -40,7 +40,7 @@ export default function Timer({seconds, tensSeconds, minutes, currentSession}){
 
     function shortSession(){
         return(
-            <div className="w-full bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl p-6 text-black text-center shadow-lg relative overflow-hidden mb-4 -z-10">
+            <div className="bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl p-6 text-black text-center shadow-lg relative overflow-hidden mb-4 -z-10">
         
             <div className="relative z-10 flex flex-col items-center">
 
