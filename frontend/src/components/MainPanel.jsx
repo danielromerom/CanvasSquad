@@ -158,7 +158,7 @@ export default function MainPanel() {
     };
 
     filterAndHydrate();
-  }, [allRawAssignments, assignmentStartDate, assignmentTimeframe, isInitialLoading, scheduledTasks]);
+  }, [allRawAssignments, assignmentStartDate, assignmentTimeframe, isInitialLoading]);
 
   // assignment date navigation handlers
   const moveAssignmentDate = (direction) => {
@@ -193,21 +193,40 @@ export default function MainPanel() {
   };
 
   const toggleAssignmentTask = (assignmentId, taskId) => {
-    setAssignments(prev => prev.map(assign => {
-      if (assignmentId && assign.id !== assignmentId) return assign;
-      return {
-        ...assign,
-        tasks: assign.tasks.map(task => 
-          task.id === taskId ? { ...task, completed: !task.completed } : task
-        )
-      };
-    }));
+    let isCurrentlyCompleted = false;
+
+    for (const assign of assignments) {
+      const foundTask = assign.tasks.find(t => t.id === taskId);
+      if (foundTask) {
+        isCurrentlyCompleted = foundTask.completed;
+        break;
+      }
+    }
+
+    if (!isCurrentlyCompleted) {
+      for (const date of Object.values(scheduledTasks)) {
+        const found = date.find(t => t.id === taskId);
+        if (found && found.completed) {
+          isCurrentlyCompleted = true;
+          break;
+        }
+      }
+    }
+
+    const newCompletedState = !isCurrentlyCompleted;
+
+    setAssignments(prev => prev.map(assign => ({
+      ...assign,
+      tasks: assign.tasks.map(task => 
+        task.id === taskId ? { ...task, completed: newCompletedState } : task
+      )
+    })));
 
     setScheduledTasks(prev => {
       const newState = { ...prev };
       Object.keys(newState).forEach(dateStr => {
         newState[dateStr] = newState[dateStr].map(task => 
-          task.id === taskId ? { ...task, completed: !task.completed } : task
+          task.id === taskId ? { ...task, completed: newCompletedState } : task
         );
       });
       return newState;
