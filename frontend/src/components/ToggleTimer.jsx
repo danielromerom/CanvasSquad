@@ -6,18 +6,17 @@ export default function ToggleTimer(){
     const timerSessions = ["Focus", "Long", "Short"]
     const [currentSession, setCurrentSession] = useState("Focus")
     const [isOpen, setIsOpen] = useState(false)
-    const [currentLogo, setCurrentLogo] = useState(<div><Brain size={16} className="pr-1"/></div>)
+    const [currentLogo, setCurrentLogo] = useState(<Brain size={16} className=""/>) 
     const [sessionMinutes, setSessionMinutes] = useState(25)
- 
     
     function handleDropDown(){
         setIsOpen(isOpen => !isOpen)
     }
 
     function getLogo(updatedSession){
-        const logo = updatedSession == "Focus" && <div><Brain  size={16} className="pr-1"/></div> || 
-                     updatedSession == "Short" && <div><Coffee size={16} className="pr-1"/></div> || 
-                     updatedSession == "Long" && <div><Leaf size={16} className="pr-1"/></div>
+        const logo = updatedSession == "Focus" && <Brain  size={16} className=""/> || 
+                     updatedSession == "Short" && <Coffee size={16} className=""/> || 
+                     updatedSession == "Long" && <Leaf size={16} className=""/>
         return logo
     }
 
@@ -38,7 +37,7 @@ export default function ToggleTimer(){
         return(
             <>
                 <div className="z-10 flex items-center justify-evenly px-4 py-1 bg-[#F3F3F5] rounded-md mb-1 w-fit gap-1" onClick={handleDropDown}> {currentLogo} {currentSession} <ChevronDown size={16} className="pl-1"/></div> 
-                <ul className=" z-10 list-none rounded-md border border-[#B2B2BB] -mb-12 bg-white">
+                <ul className=" z-10 list-none rounded-md border border-[#B2B2BB] -mb-12 bg-white p-0">
                     {timerSessions.map((session, index)=>( 
                         currentSession == session ? <li className="flex px-4 py-1 hover:bg-[#F3F3F5] rounded-md" key={session} onClick={() => handleSession(index)}> {session} <Check size={16} className="ml-6 h-auto"/></li> :
                         <li className="flex px-4 py-1 hover:bg-[#F3F3F5] rounded-md" key={session} onClick={() => handleSession(index)}> {session}</li>
@@ -53,7 +52,7 @@ export default function ToggleTimer(){
             <div className="flex w-full items-start mb-6 h-10">
                 <div className="mr-auto">Timer</div>
                 <div className="z-10 w-fit">
-                    {isOpen == true ?  displayDropDown() :  <div className=" z-10 flex items-center justify-evenly px-4 py-1 bg-[#F3F3F5] rounded-md hover:bg-neutral-200 w-full gap-1" onClick={handleDropDown}> {currentLogo}  {currentSession} <ChevronDown size={16} className="pl-1"/></div>}
+                    {isOpen == true ?  displayDropDown() :  <div className=" z-10 flex items-center justify-evenly px-4 py-1 bg-[#F3F3F5] rounded-md hover:bg-neutral-200 w-fit gap-1" onClick={handleDropDown}> {currentLogo} {currentSession} <ChevronDown size={16} className="pl-1"/></div>}
                 </div>
             </div>      
             <div className="w-full"><CountdownTimer currentSession={currentSession} sessionMinutes={sessionMinutes} /></div>    
