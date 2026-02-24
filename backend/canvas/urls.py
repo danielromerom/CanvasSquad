@@ -12,3 +12,5 @@ urlpatterns = [
 
 # curl -X POST http://127.0.0.1:8000/api/canvas/courses/255/sync/ \
   # -H "Content-Type: application/json"
+
+

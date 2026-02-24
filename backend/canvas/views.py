@@ -119,3 +119,64 @@ class AssignmentTasksView(APIView):
             "course_id": assignment.course.canvas_course_id,
             "tasks": list(tasks),
         })
+    # function to allow users to edit tasks
+    
+    # def patch(self, request, assignment_id):
+    #     """
+    #     Expect payload like:
+    #     {
+    #       "tasks": [
+    #         {
+    #           "id": 12,
+    #           "title": "Updated title",
+    #           "priority": "High",
+    #           "estimated_minutes": 45,
+    #           "is_completed": true
+    #         }
+    #       ]
+    #     }
+    #     """
+    #     try:
+    #         assignment = Assignment.objects.get(canvas_assignment_id=str(assignment_id))
+    #     except Assignment.DoesNotExist:
+    #         return Response(
+    #             {"error": f"Assignment with canvas_assignment_id {assignment_id} not found."},
+    #             status=404
+    #         )
+
+    #     tasks_data = request.data.get("tasks", [])
+    #     if not isinstance(tasks_data, list):
+    #         return Response(
+    #             {"error": "tasks must be a list"},
+    #             status=status.HTTP_400_BAD_REQUEST
+    #         )
+    #     updated = 0
+    #     for task_data in tasks_data:
+    #         task_id = task_data.get("id")
+    #         if not task_id:
+    #             continue
+    #         try:
+    #             task = Task.objects.get(
+    #                 id=task_id,
+    #                 assignment=assignment
+    #             )
+    #         except Task.DoesNotExist:
+    #             continue
+            
+    #         # update the fields that were sent to us in the request
+    #         fields = ["title", "estimated_minutes", "priority", "order", "is_completed"]
+    #         for field in fields:
+    #             if field in task_data:
+    #                 setattr(task, field, task_data[field])
+    #         task.save()
+    #         updated += 1
+
+    #     return Response(
+    #         {
+    #         "assignment_id": assignment.canvas_assignment_id,
+    #         "updated_tasks": updated,
+    #         }, 
+    #         status=status.HTTP_200_OK
+    #     )
+
+
