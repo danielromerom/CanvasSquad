@@ -1,5 +1,7 @@
 import requests
 import re # regex module
+import io
+from pypdf import PdfReader
 from urllib.parse import urljoin
 
 class CanvasClient:
@@ -108,3 +110,29 @@ class CanvasClient:
             })
 
         return pdfs
+    
+    # helper function for converting bytes to text
+    def pdf_bytes_to_text(self, pdf_bytes: bytes) -> str:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        parts = []
+        for page in reader.pages:
+            parts.append(page.extract_text() or "")
+        return "\n".join(parts).strip()
+    
+
+    def get_assignment_pdf_text(self, course_id: int, assignment_id: int, max_chars: int = 20000) -> str:
+        pdfs = self.list_assignment_pdfs(course_id, assignment_id)
+        if not pdfs:
+            raise ValueError("No PDFs found in assignment description.")
+
+        download_url = pdfs[0].get("download_url")
+        if not download_url:
+            raise ValueError("PDF metadata missing download_url.")
+
+        pdf_bytes = self.download_file_bytes(download_url)
+        text = self.pdf_bytes_to_text(pdf_bytes)
+
+        if max_chars and len(text) > max_chars:
+            text = text[:max_chars]
+
+        return text
