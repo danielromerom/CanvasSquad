@@ -73,7 +73,8 @@ OPENAI_API_KEY="your_openai_api_key"
 
 Make sure your `.env` file is included in `.gitignore` and never committed to version control.
 
-
+## TESTING FOR PDFS - USE THIS URL
+courses/<int:course_id>/assignments/<int:assignment_id>/pdfs.zip - replacing course ID and assignment ID as you see fit. 
 
 Frontend
 cd frontend
