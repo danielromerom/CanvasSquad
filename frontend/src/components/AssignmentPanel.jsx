@@ -3,6 +3,7 @@ import { Box, Typography, Card, CardContent, CircularProgress, Collapse, Button 
 import { ChevronDown, CheckCircle2, Circle, Sparkles, ChevronUp, RefreshCw } from 'lucide-react';
 import TabSwitcher from './TabSwitcher';
 import TimerPanel from './TimerPanel';
+import StatsPanel from './StatsPanel';
 import WeeklyCalendar from './WeeklyCalendar';
 import { API_BASE_URL, FETCH_HEADERS } from '../../config.js';
 
@@ -307,6 +308,7 @@ export default function AssignmentDetailView({ initialAssignment }) {
 
             {/* CALENDAR */}
             <WeeklyCalendar 
+              variant="detail"
               scheduledTasks={scheduledTasks}
               onDropTask={handleDropOnCalendar}
               onRemoveTask={removeTaskFromDay}
@@ -427,6 +429,8 @@ export default function AssignmentDetailView({ initialAssignment }) {
         </>
       )}
       {activeTab === 'timer' && <TimerPanel />}
+
+      {activeTab === 'stats' && <StatsPanel />}
     </Box>
   );
 }

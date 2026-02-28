@@ -5,6 +5,8 @@ import TabSwitcher from './TabSwitcher';
 import { API_BASE_URL, FETCH_HEADERS } from '../../config.js';
 import WeeklyCalendar from './WeeklyCalendar';
 import TimerPanel from './TimerPanel.jsx';
+import StatsPanel from './StatsPanel.jsx';
+
 const COURSE_COLORS = [
   '#3b82f6',
   '#8b5cf6',
@@ -195,12 +197,24 @@ export default function MainPanel() {
 
   const toggleAssignmentTask = (_, taskId) => {
     
+    let isCurrentlyCompleted = false;
+    for (const assign of assignments) {
+      const task = assign.tasks.find(t => t.id === taskId);
+      if (task) {
+        isCurrentlyCompleted = task.completed;
+        break;
+      }
+    }
+    const willBeCompleted = !isCurrentlyCompleted;
+
+    updateStatsOnTaskComplete(willBeCompleted, taskId);
+
     setAssignments(prevAssignments => {
       return prevAssignments.map(assign => ({
         ...assign,
         tasks: assign.tasks.map(t => {
           if (t.id === taskId) {
-            return { ...t, completed: !t.completed }; 
+            return { ...t, completed: willBeCompleted }; 
           }
           return t;
         })
@@ -209,43 +223,78 @@ export default function MainPanel() {
 
     setScheduledTasks(prevSchedule => {
       const newState = { ...prevSchedule };
-      
-      let isTaskCurrentlyCompleted = false;
-      for (const date of Object.values(prevSchedule)) {
-        const found = date.find(task => task.id === taskId);
-        if (found) {
-          isTaskCurrentlyCompleted = found.completed;
-          break;
-        }
-      }
-      if (!isTaskCurrentlyCompleted) {
-        for (const assign of assignments) {
-          const foundInList = assign.tasks.find(t => t.id === taskId);
-          if (foundInList) {
-              isTaskCurrentlyCompleted = foundInList.completed;
-              break;
-          }
-        }
-      }
-
-      const exactNewState = !isTaskCurrentlyCompleted;
-
       Object.keys(newState).forEach(dateStr => {
         newState[dateStr] = newState[dateStr].map(t => {
           if (t.id === taskId) {
-            return { ...t, completed: exactNewState };
+            return { ...t, completed: willBeCompleted };
           }
           return t;
         });
       });
-      
       return newState;
     });
   };
-  
+
+  const updateStatsOnTaskComplete = (isCompleting, taskId) => {
+      const today = new Date().toDateString();
+      let stats = JSON.parse(localStorage.getItem('userStats')) || {
+          totalTasksCompleted: 0,
+          currentStreak: 0,
+          lastActiveDate: null,
+          assignmentsCompleted: 0,
+          xp: 0
+      };
+
+      if (isCompleting) {
+          stats.totalTasksCompleted += 1;
+          stats.xp += 10; 
+
+          const parentAssign = assignments.find(a => a.tasks.some(t => t.id === taskId));
+          if (parentAssign) {
+              const completedCount = parentAssign.tasks.filter(t => t.completed).length;
+              if (completedCount + 1 === parentAssign.tasks.length) {
+                  stats.assignmentsCompleted = (stats.assignmentsCompleted || 0) + 1;
+                  stats.xp += 50;
+              }
+          }
+
+          if (stats.lastActiveDate !== today) {
+              if (!stats.lastActiveDate) {
+                  stats.currentStreak = 1;
+              } else {
+                  const lastDate = new Date(stats.lastActiveDate);
+                  const currentDate = new Date(today);
+                  const diffTime = Math.abs(currentDate - lastDate);
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+                  if (diffDays === 1) {
+                      stats.currentStreak += 1; 
+                  } else if (diffDays > 1) {
+                      stats.currentStreak = 1; 
+                  }
+              }
+              stats.lastActiveDate = today;
+          }
+      } else {
+          stats.totalTasksCompleted = Math.max(0, stats.totalTasksCompleted - 1);
+          stats.xp = Math.max(0, stats.xp - 10); 
+          
+          const parentAssign = assignments.find(a => a.tasks.some(t => t.id === taskId));
+          if (parentAssign) {
+              const completedCount = parentAssign.tasks.filter(t => t.completed).length;
+              if (completedCount === parentAssign.tasks.length) {
+                  stats.assignmentsCompleted = Math.max(0, (stats.assignmentsCompleted || 0) - 1);
+                  stats.xp = Math.max(0, stats.xp - 50);
+              }
+          }
+      }
+
+      localStorage.setItem('userStats', JSON.stringify(stats));
+  };
+
   // drag and drop
   const handleDragStart = (e, task, courseColor) => {
-    draggedTaskRef.current = { ...task, color: courseColor, completed: false };
+    draggedTaskRef.current = { ...task, color: courseColor };
     
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", JSON.stringify({ ...task, color: courseColor }));
@@ -365,11 +414,17 @@ export default function MainPanel() {
         {currentTab === 'schedule' && (
           <>
             <WeeklyCalendar 
+              variant="main"
+              assignments={assignments}
               scheduledTasks={scheduledTasks}
               onDropTask={handleDropOnCalendar}
               onRemoveTask={removeTaskFromDay}
-              onToggleTask={toggleAssignmentTask}
               onClearDay={handleClearDay}
+              onToggleTask={toggleAssignmentTask}
+              onGroupClick={(assignmentId) => {
+                 const assign = assignments.find(a => String(a.canvas_assignment_id) === String(assignmentId) || String(a.id) === String(assignmentId));
+                 if (assign) openAssignmentLink(assign);
+              }}
             />
 
             <Box sx={{ mb: 2 }}>
@@ -564,16 +619,12 @@ export default function MainPanel() {
             </>
         )}
 
-        {/* Placeholders for other tabs */}
         {currentTab === 'timer' && (
           <TimerPanel />
         )}
 
         {currentTab === 'stats' && (
-          <Box sx={{ textAlign: 'center', p: 5, border: '2px dashed #e5e7eb', borderRadius: 4, mt: 4, bgcolor: 'white' }}>
-            <BarChart3 className="mx-auto" size={40} color="#d1d5db" />
-            <Typography color="#9ca3af" fontWeight={500}>Stats Coming Soon</Typography>
-          </Box>
+          <StatsPanel />
         )}
 
       </Box>
