@@ -2,12 +2,13 @@ import { useState } from "react"
 import { ChevronDown, Brain, Coffee, Leaf, Check} from 'lucide-react';
 import CountdownTimer from "./CountdownTimer";
 
-export default function ToggleTimer(){
+export default function ToggleTimer({timerTask, taskTime, handleDragStart, toggleTaskExpansion, toggleTask, localAssignment, handleTimer, activeTab}){
+
     const timerSessions = ["Focus", "Long", "Short"]
     const [currentSession, setCurrentSession] = useState("Focus")
     const [isOpen, setIsOpen] = useState(false)
     const [currentLogo, setCurrentLogo] = useState(<Brain size={16} className=""/>) 
-    const [sessionMinutes, setSessionMinutes] = useState(25)
+    const [sessionMinutes, setSessionMinutes] = useState(taskTime ? Number(taskTime.slice(0,-1)):25)
     
     function handleDropDown(){
         setIsOpen(isOpen => !isOpen)
@@ -37,7 +38,7 @@ export default function ToggleTimer(){
         return(
             <>
                 <div className="z-10 flex items-center justify-evenly px-4 py-1 bg-[#F3F3F5] rounded-md mb-1 w-fit gap-1" onClick={handleDropDown}> {currentLogo} {currentSession} <ChevronDown size={16} className="pl-1"/></div> 
-                <ul className=" z-10 list-none rounded-md border border-[#B2B2BB] -mb-12 bg-white p-0">
+                <ul className=" z-10 list-none rounded-md border border-[#B2B2BB] -mb-12 bg-white p-0 m-0">
                     {timerSessions.map((session, index)=>( 
                         currentSession == session ? <li className="flex px-4 py-1 hover:bg-[#F3F3F5] rounded-md" key={session} onClick={() => handleSession(index)}> {session} <Check size={16} className="ml-6 h-auto"/></li> :
                         <li className="flex px-4 py-1 hover:bg-[#F3F3F5] rounded-md" key={session} onClick={() => handleSession(index)}> {session}</li>
@@ -55,7 +56,18 @@ export default function ToggleTimer(){
                     {isOpen == true ?  displayDropDown() :  <div className=" z-10 flex items-center justify-evenly px-4 py-1 bg-[#F3F3F5] rounded-md hover:bg-neutral-200 w-fit gap-1" onClick={handleDropDown}> {currentLogo} {currentSession} <ChevronDown size={16} className="pl-1"/></div>}
                 </div>
             </div>      
-            <div className="w-full"><CountdownTimer currentSession={currentSession} sessionMinutes={sessionMinutes} /></div>    
+            <div className="w-full">
+                <CountdownTimer currentSession={currentSession}
+                    sessionMinutes={sessionMinutes}
+                    timerTask={timerTask}
+                    handleDragStart={handleDragStart}
+                    toggleTaskExpansion={toggleTaskExpansion}
+                    toggleTask={toggleTask}
+                    localAssignment={localAssignment}
+                    handleTimer={handleTimer}
+                    activeTab={activeTab}
+                   />
+            </div>    
         </>
     )
 }

@@ -5,16 +5,29 @@ import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import PauseOutlinedIcon from '@mui/icons-material/PauseOutlined';
 import resetLogo from "../assets/reset.svg"
 import ProgressBar from "./ProgressBar";
+import AssignmentTask from "./AssignmentTask";
 
-
-export default function CountdownTimer({currentSession, sessionMinutes}){
+export default function CountdownTimer({currentSession, sessionMinutes, timerTask, handleDragStart, toggleTaskExpansion, toggleTask, localAssignment, handleTimer, activeTab}){
     const [minutes, setMinutes] = useState(sessionMinutes);
     const [seconds, setSeconds] = useState(0);
     const [tensSeconds, setTensSeconds] = useState(0);
     const [isRunning, setIsRunning] = useState(false);
     const [progress, setProgress] = useState(0);
-    const [focusMinutes, setFocusMinutes] = useState(0)
-    const [completedSessions, setCompletedSessions] = useState(0)
+
+    const [focusMinutes, setFocusMinutes] = useState(()=>{
+        const saved = localStorage.getItem('focusMinutes');
+        return saved ? Number(JSON.parse(saved)) : 0;
+    })
+    const [completedSessions, setCompletedSessions] = useState(() => {
+        const saved = localStorage.getItem('completedSessions');
+        return saved ? Number(JSON.parse(saved)) : 0;
+    })
+
+    useEffect(() => {
+        localStorage.setItem('focusMinutes', JSON.stringify(focusMinutes));
+        localStorage.setItem('completedSessions', JSON.stringify(completedSessions));
+      }, [focusMinutes, completedSessions]);
+    
 
     useEffect(() => {
         setMinutes(sessionMinutes)
@@ -118,6 +131,8 @@ export default function CountdownTimer({currentSession, sessionMinutes}){
                     </button>
                 </div>
             </div>
+
+            {timerTask?  <div className="mb-4"><AssignmentTask task={timerTask} handleDragStart={handleDragStart} toggleTaskExpansion={toggleTaskExpansion} toggleTask={toggleTask} localAssignment={localAssignment} handleTimer={handleTimer} activeTab={activeTab}/> </div> :null}
             
             <div className="flex-grow overflow-y-auto space-y-3 pr-1 pb-4 custom-scrollbar">
                     <InformationContainer focusMinutes={focusMinutes} completedSessions={completedSessions}/>

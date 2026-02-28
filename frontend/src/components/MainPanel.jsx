@@ -37,12 +37,16 @@ export default function MainPanel() {
   const [isAssignmentsLoading, setIsAssignmentsLoading] = useState(true);
 
   const [expandedIds, setExpandedIds] = useState([]); 
+
+  const [timerTask, setTimerTask] = useState(null);
+
   const [scheduledTasks, setScheduledTasks] = useState(() => {
     const saved = localStorage.getItem('scheduledTasks');
     return saved ? JSON.parse(saved) : {};
   });
 
   const draggedTaskRef = useRef(null);
+
 
   useEffect(() => {
     localStorage.setItem('scheduledTasks', JSON.stringify(scheduledTasks));
@@ -357,6 +361,7 @@ export default function MainPanel() {
           variant="main" 
           activeTab={currentTab} 
           onTabChange={setCurrentTab} 
+          setTimerTask={setTimerTask}
         />
       </div>
 
