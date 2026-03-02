@@ -39,21 +39,23 @@ function injectAgency() {
 
 setInterval(() => {
     // ... (Your existing detection logic) ...
-    const path = window.location.pathname;
+   const path = window.location.pathname;
+    
+    // Updated detection logic
     const isAssignment = path.includes('/assignments/') && !path.includes('/syllabus');
-    const isDashboard = path === '/';
+    const isDashboard = path === '/' || path === '/dashboard';
+    
+    // New Check: Matches /courses/123 or /courses/123/assignments (but not a specific assignment)
+    const isCourseView = path.match(/^\/courses\/\d+(\/assignments)?\/?$/);
 
     const mainLayout = document.getElementById('main');
     const myWidget = document.getElementById('agency-native-widget');
-    const nativeSidebarWrapper = document.getElementById('right-side-wrapper');
-
-    const shouldShowWidget = isDashboard || isAssignment;
+    
+    // The widget should now show on Dashboard, Assignment pages, or Course pages
+    const shouldShowWidget = isDashboard || isAssignment || isCourseView;
 
     if (myWidget) {
-        const targetDisplay = shouldShowWidget ? 'block' : 'none';
-        if (myWidget.style.display !== targetDisplay) {
-            myWidget.style.display = targetDisplay;
-        }
+        myWidget.style.display = shouldShowWidget ? 'block' : 'none';
     } else if (shouldShowWidget) {
         injectAgency(); 
     }

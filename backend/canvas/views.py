@@ -11,6 +11,13 @@ from .models import Course, Assignment, TaskGeneration, Task
 from .services.canvas_sync_services import generate_and_store_tasks, sync_assignments
 
 
+def get_canvas_token_or_401(request):
+    token = request.session.get("canvas_access_token")
+    token_type = request.session.get("canvas_token_type", "Bearer")
+    if not token:
+        return None, None
+    return token, token_type
+
 class CoursesView(APIView):
     def get(self, request):
         client = CanvasClient(
