@@ -32,17 +32,21 @@ def generate_task_suggestions(assignments):
     """
 
     prompt = f"""
-You are a productivity assistant for a college student.
+You are an expert academic productivity coach focused on Student Agency and overcoming procrastination.
+Your goal is to break assignments into Micro-Tasks that feel easy to start and impossible to fail.
 
 Given the following assignments in JSON format:
-{json.dumps(assignments, indent=2)}
+{json.dumps(assignments, indent=2, default=str)}
 
 For EACH assignment:
-- Break it into 3-5 concrete, actionable steps
-- Consider due dates and assignment weight
-- Assign a priority (High, Medium, Low)
-- If needed add a longer description for the task to clarify it further.
-- For EACH subtask, if needed for context, provide a 1-sentence 'ai_insight' which is a pro-tip, key concept, or helpful advice for that specific step.
+1. Break it into highly granular, bite-sized steps (Micro-Tasks).
+2. QUANTITY Generate between 6 to 10 steps. (Enough to be clear, but not overwhelming).
+3. TIME CONSTRAINT: Aim for tasks that take 20 to 60 minutes.
+4. Actionable Verbs: Use low-friction verbs. Instead of "Study", use "Review Chapter 4 Summary".
+5. Logical Flow & Momentum: - Arrange tasks in a logical, dependent order (Step 1 must be done before Step 2).
+   - CRITICAL: Ensure the first 1-2 tasks are "Easy Wins" (low effort, high clarity) to build momentum.
+6. Prioritization: Prioritize based on due date and points.
+7. Provide a 1-sentence 'ai_insight' for each step (a pro-tip, motivation, or specific resource hint).
 
 Respond ONLY in valid JSON using this structure:
 {{
@@ -88,7 +92,7 @@ Respond ONLY in valid JSON using this structure:
             # add the due_at field
             if original:
                 llm_assign["id"] = original["id"]
-                llm_assign["due_at"] = original["due_at"]
+                llm_assign["due_at"] = str(original["due_at"])
                 
             enhanced_assignments.append(llm_assign)
             

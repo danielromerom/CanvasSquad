@@ -30,9 +30,15 @@ export default function TabSwitcher({
           <button
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
+            style={{ 
+              border: 'none', 
+              outline: 'none', 
+              WebkitTapHighlightColor: 'transparent' 
+            }}
             className={`
               flex-1 flex items-center justify-center gap-2 
               py-1.5 px-3 rounded-full text-sm font-medium transition-all duration-200
+              bg-gray-500
               ${isActive 
                 ? 'bg-white text-gray-900 shadow-sm'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'

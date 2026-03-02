@@ -2,66 +2,77 @@ import React, { useState, useEffect } from 'react';
 import { Box, Typography, Card } from '@mui/material';
 import MainPanel from './components/MainPanel';
 import AssignmentPanel from './components/AssignmentPanel';
-import TimerPanel from './components/TimerPanel';
 
 function App() {
   const [view, setView] = useState('main');
+  const [courseId, setCourseId] = useState(null);
+  const [assignmentId, setAssignmentId] = useState(null);
 
-  // checks what page is open
   useEffect(() => {
     const checkContext = () => {
-      const url = window.location.href;
       const path = window.location.pathname; 
-      const container = document.getElementById('agency-native-widget');
+      
+      // 1. Specific Assignment Detail View (/courses/###/assignments/###)
+      // The (\d+)$ at the end ensures we match only when the URL ends with an ID
+      const assignDetailMatch = path.match(/\/courses\/(\d+)\/assignments\/(\d+)\/?$/);
+      
+      // 2. Course Assignments List View (/courses/###/assignments)
+      // This matches only if the URL ends exactly with "assignments" (ignoring trailing slash)
+      const assignListMatch = path.match(/\/courses\/(\d+)\/assignments\/?$/);
 
-      if (url.includes('/assignments/') && !url.includes('/syllabus')) {
+      if (assignDetailMatch && !path.includes('/syllabus')) {
         setView('assignment');
-        if (container) container.style.display = 'block';
+        setCourseId(assignDetailMatch[1]);
+        setAssignmentId(assignDetailMatch[2]);
       } 
-      else if (path === '/') {
+      else if (assignListMatch) {
+        setView('courseAssignments');
+        setCourseId(assignListMatch[1]);
+        setAssignmentId(null);
+      }
+      else if (path.match(/\/courses\/\d+/)) {
+        const courseMatch = path.match(/\/courses\/(\d+)/);
+        setCourseId(courseMatch[1]);
+        setView('course');
+      } 
+      else if (path === '/' || path === '/dashboard') {
         setView('main');
-        if (container) container.style.display = 'block';
+        setCourseId(null);
       } 
       else {
         setView('hidden');
-        if (container) container.style.display = 'none'; 
       }
     };
 
     checkContext();
-    // check every second in case user navigates without reload
     const intervalId = setInterval(checkContext, 1000);
     return () => clearInterval(intervalId);
   }, []);
 
   return (
     <Box sx={{ width: '100%', fontFamily: 'Lato, sans-serif', mb: 2 }}>
-      
-      {/* Header */}
       <Box sx={{ 
         borderBottom: '1px solid rgb(39, 53, 64, 0.1)', 
-        pb: 1,
-        mt: 2.75,
-        mb: 1,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
+        pb: 1, mt: 2.75, mb: 1,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
       }}>
-        <Typography variant="h6" sx={{ 
-          fontSize: '1rem', 
-          fontWeight: 'bold', 
-          color: 'rgb(39, 53, 64)' 
-        }}>
-          {/* Dynamic Title */}
-          {view === 'main' ? 'Agency Schedule' : 'Task Breakdown'}
+        <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 'bold', color: 'rgb(39, 53, 64)' }}>
+          {(view === 'assignment' || view === 'courseAssignments') ? 'Task Breakdown' : 'Agency Schedule'}
         </Typography>
       </Box>
 
-      {/* Dynamic Content Area */}
       <Card elevation={0} sx={{ bgcolor: 'transparent' }}>
-        {view === 'main' ? <MainPanel /> : <AssignmentPanel />}
+        {/* Only pass showDropdown=true if we are in the 'courseAssignments' view */}
+        {(view === 'assignment' || view === 'courseAssignments') ? (
+          <AssignmentPanel 
+            courseId={courseId} 
+            initialAssignmentId={assignmentId} 
+            showDropdown={view === 'courseAssignments'} 
+          />
+        ) : (
+          <MainPanel filteredCourseId={courseId} />
+        )}
       </Card>
-
     </Box>
   );
 }

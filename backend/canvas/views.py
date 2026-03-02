@@ -1,12 +1,15 @@
+from http import client
 from django.shortcuts import render
-
+from django.shortcuts import get_object_or_404
 from django.conf import settings
+from requests import request
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .canvas_client import CanvasClient
 from rest_framework import status
-from .services.assignment_service import normalize_assignments
-from .services.llm_service import generate_task_suggestions
+from .canvas_client import CanvasClient
+from .models import Course, Assignment, TaskGeneration, Task
+from .services.canvas_sync_services import generate_and_store_tasks, sync_assignments
+
 
 def get_canvas_token_or_401(request):
     token = request.session.get("canvas_access_token")
@@ -17,33 +20,116 @@ def get_canvas_token_or_401(request):
 
 class CoursesView(APIView):
     def get(self, request):
-        token, _ = get_canvas_token_or_401(request)
-        if not token:
-            return Response({"detail": "Not authenticated with Canvas"}, status=status.HTTP_401_UNAUTHORIZED)
+        client = CanvasClient(
+            settings.CANVAS_BASE_URL,
+            settings.CANVAS_ACCESS_TOKEN
+        )
 
-        client = CanvasClient(settings.CANVAS_BASE_URL, token)
         courses_raw = client.list_courses()
+        saved_courses = []
 
-        return Response({"courses": courses_raw})
+        for c in courses_raw:
+            course, _ = Course.objects.update_or_create(
+                canvas_course_id=c["id"],
+                    defaults={
+                        "name": c.get("name"),
+                        "course_code": c.get("course_code", "")
+                    }
+                )
+            saved_courses.append(course)
+
+            return Response({
+                "count": len(saved_courses),
+                "courses": courses_raw
+            })
 
 class CourseAssignmentsView(APIView):
+    """
+    GET: Return all assignments for a course from the database. Does not call Canvas or LLM.
+    """
     def get(self, request, course_id):
-        token, _ = get_canvas_token_or_401(request)
-        if not token:
-            return Response({"detail": "Not authenticated with Canvas"}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            course = Course.objects.get(canvas_course_id=str(course_id))
+        except Course.DoesNotExist:
+            return Response(
+                {"error": f"Course with canvas_course_id {course_id} not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        client = CanvasClient(settings.CANVAS_BASE_URL, token)
+        assignments = course.assignments.all().values(
+            "id",
+            "canvas_assignment_id",
+            "title",
+            "description",
+            "due_at",
+            "points_possible"
+        )
 
+        return Response({
+            "course_id": course.canvas_course_id,
+            "course_name": course.name,
+            "assignment_count": assignments.count(),
+            "assignments": list(assignments)
+        })
+
+
+
+class CourseSyncView(APIView):
+    def post(self, request, course_id):
+        force_update = request.data.get("force", False)
+
+        client = CanvasClient(settings.CANVAS_BASE_URL, settings.CANVAS_ACCESS_TOKEN)
         raw_assignments = client.list_assignments(course_id)
+        course_data = client.get_course(course_id)
 
-        normalized_assignments = normalize_assignments(raw_assignments)
+        course_name = course_data.get("name", "Unknown Course")
 
-        tasks = generate_task_suggestions(normalized_assignments)
+        # Sync assignments into DB
+        assignments = sync_assignments(
+            course_canvas_id=course_id,
+            course_name=course_name,
+            raw_assignments=raw_assignments
+        )
+
+        # Generate tasks via LLM
+        generate_and_store_tasks(assignments, force_update)
 
         return Response({
             "course_id": course_id,
-            "assignment_count": len(normalized_assignments),
-            "tasks": tasks
+            "course_name": course_name,
+            "assignment_count": len(assignments),
+            "message": "Assignments synced and tasks generated successfully",
+            "forced": force_update
         })
 
-       
+    
+class AssignmentTasksView(APIView):
+    """
+    GET: Return all tasks for a given assignment from the db. Does not call Canvas or LLM. Lookup is by Canvas assignment ID.
+    """
+    def get(self, request, assignment_id):
+        try:
+            assignment = Assignment.objects.get(canvas_assignment_id=str(assignment_id))
+        except Assignment.DoesNotExist:
+            return Response(
+                {"error": f"Assignment with canvas_assignment_id {assignment_id} not found."},
+                status=404
+            )
+
+        tasks = assignment.tasks.all().values(
+            "id",
+            "title",
+            "estimated_minutes",
+            "priority",
+            "order",
+            "is_completed",
+            "description",
+            "ai_insight"
+        )
+
+        return Response({
+            "assignment_id": assignment.canvas_assignment_id,  
+            "assignment_title": assignment.title,
+            "course_id": assignment.course.canvas_course_id,
+            "tasks": list(tasks),
+        })

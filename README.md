@@ -73,9 +73,10 @@ OPENAI_API_KEY="your_openai_api_key"
 
 Make sure your `.env` file is included in `.gitignore` and never committed to version control.
 
+## TESTING FOR PDFS - USE THIS URL
+courses/<int:course_id>/assignments/<int:assignment_id>/pdfs.zip - replacing course ID and assignment ID as you see fit. 
 
-
-Frontend
+## Frontend
 cd frontend
 npm install
 npm run dev
@@ -95,3 +96,19 @@ Note: Do NOT select frontend or public. You must select dist.
 Verify:
 Go to Canvas (e.g., ufl.instructure.com).
 You should see the  widget injected into the dashboard.
+
+## NGrok Setup (Temporary while we wait for backend deployment)
+
+To expose your local backend server to the internet for testing:
+
+Go to https://ngrok.com/
+Create an account
+Go to https://dashboard.ngrok.com/get-started/setup/windows or https://dashboard.ngrok.com/get-started/setup/macos
+
+Install ngrok
+Add authtoken
+
+Run command:
+ngrok http 8000
+Copy ngrok link (Example: 'https://crosscurrented-roselle-prototypical.ngrok-free.dev')
+Replace export const API_BASE_URL = "" from frontend's config.js file with ngrok link

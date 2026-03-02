@@ -1,18 +1,34 @@
 import React, {useEffect, useState} from "react";
 import Timer from "./Timer"
+import InformationContainer from "./InformationContainer";
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import PauseOutlinedIcon from '@mui/icons-material/PauseOutlined';
 import resetLogo from "../assets/reset.svg"
+import ProgressBar from "./ProgressBar";
 
-export default function CountdownTimer(){
-    const [minutes, setMinutes] = useState(0);
+
+export default function CountdownTimer({currentSession, sessionMinutes}){
+    const [minutes, setMinutes] = useState(sessionMinutes);
     const [seconds, setSeconds] = useState(0);
     const [tensSeconds, setTensSeconds] = useState(0);
     const [isRunning, setIsRunning] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [focusMinutes, setFocusMinutes] = useState(0)
+    const [completedSessions, setCompletedSessions] = useState(0)
+
+    useEffect(() => {
+        setMinutes(sessionMinutes)
+        setSeconds(0)
+        setTensSeconds(0)
+        setIsRunning(false)
+        setProgress(0)
+    },[sessionMinutes])
 
     useEffect(() => {
         let interval;
+
         if(isRunning){
+            calculateProgress()
             interval = setInterval(() =>{
                 if(seconds > 0){
                     setSeconds((seconds)=> seconds-1);
@@ -23,6 +39,8 @@ export default function CountdownTimer(){
                 else{
                     if (minutes === 0) {
                         setIsRunning(false);
+                        setFocusMinutes((focusMinutes) => focusMinutes+sessionMinutes)
+                        setCompletedSessions((completedSession) => completedSession+1)
                     } else {
                         setMinutes((minutes) => minutes - 1);
                         setTensSeconds(5);
@@ -31,6 +49,7 @@ export default function CountdownTimer(){
                 }
             }, 1000);
         }
+
         return () => clearInterval(interval);
     }, [seconds, minutes, tensSeconds, isRunning])
 
@@ -48,43 +67,61 @@ export default function CountdownTimer(){
 
     function resetTimer(){
         setIsRunning(false)
-        setMinutes(25)
+        setMinutes(sessionMinutes)
         setTensSeconds(0)
         setSeconds(0)
+        setProgress(0)
     }
     
-    return(
-        <div className="flex flex-col w-full">
-            <Timer 
-                seconds={seconds} 
-                tensSeconds={tensSeconds} 
-                minutes={minutes} 
-            />
 
-            <div className="flex items-center gap-3 justify-center">
-                {!isRunning ? (
+     function calculateProgress(){
+        const convertToSeconds = ((minutes*60) + (tensSeconds*10)+ seconds)
+        const sessionMinToSec = (sessionMinutes*60);
+        const progressPercentage = ((1- (convertToSeconds/sessionMinToSec)) *100)
+        setProgress(progressPercentage)
+    }
+
+    return(
+        <>
+            <div className="flex-col mb-6 border border-gray-200 rounded-xl p-4">
+                <Timer 
+                    seconds={seconds} 
+                    tensSeconds={tensSeconds} 
+                    minutes={minutes} 
+                    currentSession={currentSession}
+                /> 
+                <ProgressBar progress={progress}/>
+
+                <div className="flex items-center gap-3 justify-center">
+                    {!isRunning ? (
+                        
+                        <button 
+                            className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2.5 rounded-full font-bold text-sm shadow-md hover:bg-indigo-700 transition-all flex-grow justify-center" 
+                            onClick={startTimer}
+                        >
+                            <PlayArrowOutlinedIcon size={16} fill="currentColor" /> Start
+                        </button>
+                    ) : (
+                        <button 
+                            className="flex items-center gap-2 bg-amber-500 text-white px-6 py-2.5 rounded-full font-bold text-sm shadow-md hover:bg-amber-600 transition-all flex-grow justify-center" 
+                            onClick={pauseTimer}
+                        >
+                            <PauseOutlinedIcon size={16} fill="currentColor" /> Pause
+                        </button>
+                    )}
+                        
                     <button 
-                        className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2.5 rounded-full font-bold text-sm shadow-md hover:bg-indigo-700 transition-all flex-grow justify-center" 
-                        onClick={startTimer}
+                        className="p-2.5 bg-white border border-gray-200 rounded-full text-gray-500 hover:bg-gray-50 transition-colors" 
+                        onClick={resetTimer}
                     >
-                        <PlayArrowOutlinedIcon size={16} fill="currentColor" /> Start
+                        <img src={resetLogo} alt="Reset" className="w-3 h-3" />
                     </button>
-                ) : (
-                    <button 
-                        className="flex items-center gap-2 bg-amber-500 text-white px-6 py-2.5 rounded-full font-bold text-sm shadow-md hover:bg-amber-600 transition-all flex-grow justify-center" 
-                        onClick={pauseTimer}
-                    >
-                        <PauseOutlinedIcon size={16} fill="currentColor" /> Pause
-                    </button>
-                )}
-                
-                <button 
-                    className="p-2.5 bg-white border border-gray-200 rounded-full text-gray-500 hover:bg-gray-50 transition-colors" 
-                    onClick={resetTimer}
-                >
-                    <img src={resetLogo} alt="Reset" className="w-3 h-3" />
-                </button>
+                </div>
             </div>
-        </div>
+            
+            <div className="flex-grow overflow-y-auto space-y-3 pr-1 pb-4 custom-scrollbar">
+                    <InformationContainer focusMinutes={focusMinutes} completedSessions={completedSessions}/>
+            </div>
+        </>
     );
 }
