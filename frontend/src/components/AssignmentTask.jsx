@@ -37,7 +37,7 @@ export default function AssignmentTask({task, handleDragStart, toggleTaskExpansi
                                     
                             {/* Header Row: Label + Chevron */}
                             <div className="flex items-center justify-between">
-                            <Typography variant="body2" sx={{ fontWeight: 600, textDecoration: task.completed ? 'line-through' : 'none', color: '#1f2937' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, textDecoration: task.completed ? 'line-through' : 'none', color: '#1f2937', maxWidth: "236px", wordWrap: "break-word" }}>
                                 {task.label}
                             </Typography>
 
