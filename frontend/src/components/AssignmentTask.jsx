@@ -6,7 +6,7 @@ export default function AssignmentTask({task, handleDragStart, toggleTaskExpansi
     const[isExpanded, setIsExpanded] = useState(false)
 
     return (
-        <div className="h-0">
+        <div>
         {task?(<>
             <Card 
                 key={task.id} 
