@@ -3,6 +3,7 @@ import { Box, Typography, Card, CardContent, CircularProgress, Collapse, Button,
 import { ChevronDown, CheckCircle2, Circle, Sparkles, ChevronUp, RefreshCw } from 'lucide-react';
 import TabSwitcher from './TabSwitcher';
 import TimerPanel from './TimerPanel';
+import AssignmentTask from './AssignmentTask.jsx';
 import StatsPanel from './StatsPanel';
 import WeeklyCalendar from './WeeklyCalendar';
 import { API_BASE_URL, FETCH_HEADERS } from '../../config.js';
@@ -30,6 +31,8 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
   // NEW: State for dropdown selection and assignment list
   const [selectedAssignmentId, setSelectedAssignmentId] = useState(initialAssignmentId);
   const [courseAssignments, setCourseAssignments] = useState([]);
+
+  const [timerTask, setTimerTask] = useState(null);
 
   const [scheduledTasks, setScheduledTasks] = useState(() => {
     const saved = localStorage.getItem('scheduledTasks');
@@ -229,6 +232,11 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
     setScheduledTasks(newSchedule);
   };
 
+  const handleTimer = (task) =>{
+      setTimerTask(task);
+      setActiveTab("timer");
+  }
+
   if (isLoading && !localAssignment) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 10 }}>
@@ -262,7 +270,7 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
       )}
 
       <div className="mb-4">
-        <TabSwitcher variant="assignment" activeTab={activeTab} onTabChange={setActiveTab} />
+        <TabSwitcher variant="assignment" activeTab={activeTab} onTabChange={setActiveTab} setTimerTask={setTimerTask}/>
       </div>
 
       {activeTab === 'tasks' && (
@@ -294,48 +302,39 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
              </Box>
           </Box>
           
-          <div className="space-y-3">
-            {tasks.length === 0 && !isRegenerating && !isLoading ? (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-                    No tasks found. Click 'Regenerate' to create a plan.
-                </Typography>
-            ) : (
-              tasks.map((task) => {
-              const isExpanded = expandedTasks.includes(task.id);
-              return (
-                <Card key={task.id} draggable={true} onDragStart={(e) => handleDragStart(e, task)} sx={{ borderRadius: '12px', cursor: 'pointer', boxShadow: 'none', border: '1px solid #e5e7eb', bgcolor: task.completed ? '#f9fafb' : 'white', transition: 'all 0.2s', '&:hover': { borderColor: localAssignment?.color || '#3b82f6' } }} onClick={() => toggleTaskExpansion(task.id)}>
-                  <CardContent sx={{ p: '12px 16px !important', display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-                      <div onClick={(e) => { e.stopPropagation(); toggleTask(null, task.id); }} className="cursor-pointer mt-1">
-                        {task.completed ? <CheckCircle2 size={20} className="text-green-500" /> : <Circle size={20} className="text-gray-300" />}
-                      </div>
-                      <Box sx={{ flexGrow: 1 }}>
-                        <div className="flex items-center justify-between">
-                          <Typography variant="body2" sx={{ fontWeight: 600, textDecoration: task.completed ? 'line-through' : 'none', color: '#1f2937' }}>{task.label}</Typography>
-                          <div className="flex items-center gap-2">
-                            <span className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full">{task.estTime}</span>
-                            {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
-                          </div>
-                        </div>
-                        <Collapse in={isExpanded}>
-                          <Box sx={{ pt: 1.5 }}>
-                            {task.description && <Typography variant="caption" sx={{ display: 'block', mb: 1.5, color: '#4b5563', fontSize: '12px', lineHeight: 1.5 }}>{task.description}</Typography>}
-                            {task.aiSummary && !task.completed && (
-                              <Box sx={{ p: 1.5, borderRadius: '8px', background: 'linear-gradient(135deg, #f5f3ff 0%, #f0f7ff 100%)', border: '1px solid #e0e7ff' }}>
-                                <div className="flex items-center gap-1.5 mb-1"><Sparkles size={12} className="text-indigo-500" /><Typography sx={{ fontSize: '10px', fontWeight: 800, color: '#6366f1' }}>PRO TIP</Typography></div>
-                                <Typography variant="caption" sx={{ color: '#4338ca', fontSize: '11px', lineHeight: 1.4, display: 'block' }}>{task.aiSummary}</Typography>
-                              </Box>
-                            )}
-                          </Box>
-                        </Collapse>
-                      </Box>
-                  </CardContent>
-                </Card>
-              );
-            }))}
-          </div>
+          {isLoading && tasks.length === 0 ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
+          ) : (
+            <div className="space-y-3">
+              {tasks.length === 0 && !isRegenerating ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+                      No tasks generated yet. Click 'Regenerate' to create a plan.
+                  </Typography>
+              ) : (
+                tasks.map((task) => {
+                  const isExpanded = expandedTasks.includes(task.id);
+                  return(
+                    <AssignmentTask task={task} handleDragStart={handleDragStart} toggleTaskExpansion={toggleTaskExpansion} toggleTask={toggleTask} localAssignment={localAssignment} handleTimer={handleTimer} setTasks={setTasks}/>
+                  )
+              }))}
+            </div>
+          )}
         </>
       )}
-      {activeTab === 'timer' && <TimerPanel />}
+
+      {activeTab === 'timer' && timerTask && 
+      <TimerPanel 
+      timerTask={timerTask} 
+      handleDragStart={handleDragStart}
+      toggleTaskExpansion={toggleTaskExpansion}
+      toggleTask={toggleTask}
+      localAssignment={localAssignment}
+      handleTimer={handleTimer}
+      activeTab={activeTab}
+      setTasks={setTasks}
+      /> || 
+      activeTab === 'timer' && (timerTask == null) && <TimerPanel />
+      }
       {activeTab === 'stats' && <StatsPanel />}
     </Box>
   );

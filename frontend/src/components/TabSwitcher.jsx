@@ -13,9 +13,19 @@ const TAB_CONFIG = {
   ]
 };
 
+  const handleTabChange = (tabId, onTabChange, setTimerTask) =>{
+    onTabChange(tabId)
+
+    if(tabId != 'timer'){
+      setTimerTask(() => null)
+    }
+    
+  }
+
 export default function TabSwitcher({ 
   activeTab, 
-  onTabChange, 
+  onTabChange,
+  setTimerTask, 
   variant = 'main'
 }) {
   const tabs = TAB_CONFIG[variant];
@@ -29,7 +39,7 @@ export default function TabSwitcher({
         return (
           <button
             key={tab.id}
-            onClick={() => onTabChange(tab.id)}
+            onClick={() => handleTabChange(tab.id, onTabChange, setTimerTask)}
             style={{ 
               border: 'none', 
               outline: 'none', 

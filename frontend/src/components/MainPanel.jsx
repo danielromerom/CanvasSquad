@@ -38,12 +38,16 @@ export default function MainPanel({ filteredCourseId }) {
   const [isAssignmentsLoading, setIsAssignmentsLoading] = useState(true);
 
   const [expandedIds, setExpandedIds] = useState([]); 
+
+  const [timerTask, setTimerTask] = useState(null);
+
   const [scheduledTasks, setScheduledTasks] = useState(() => {
     const saved = localStorage.getItem('scheduledTasks');
     return saved ? JSON.parse(saved) : {};
   });
 
   const draggedTaskRef = useRef(null);
+
 
   useEffect(() => {
     localStorage.setItem('scheduledTasks', JSON.stringify(scheduledTasks));
@@ -384,7 +388,7 @@ export default function MainPanel({ filteredCourseId }) {
   return (
     <Box sx={{ pt: 2, pb: 4, pl: 1.5, pr: 1.5, maxWidth: '640px', mx: 'auto' }}>
       <div className="mb-6 px-2">
-        <TabSwitcher variant="main" activeTab={currentTab} onTabChange={setCurrentTab} />
+        <TabSwitcher variant="main" activeTab={currentTab} onTabChange={setCurrentTab} setTimerTask={setTimerTask} />
       </div>
 
       <Box sx={{ px: 1 }}>
