@@ -154,7 +154,7 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
              return {
                  id: frontendTaskId, 
                  label: t.title, 
-                 estTime: t.estimated_minutes ? `${t.estimated_minutes}m` : '15m',
+                 time: t.estimated_minutes ? `${t.estimated_minutes}m` : '15m',
                  completed: t.is_completed || locallyCompletedIds.has(frontendTaskId),
                  aiSummary: t.ai_insight || null, 
                  description: t.description || null
@@ -180,9 +180,18 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
 
   // --- HANDLERS ---
   const handleDragStart = (e, task) => {
-    draggedTaskRef.current = { 
-      ...task, color: localAssignment?.color || '#3b82f6', course: localAssignment?.course || 'Canvas' 
+    const dragData = { 
+      ...task, 
+      color: localAssignment?.color || '#3b82f6', 
+      course: localAssignment?.course || 'Canvas' 
     };
+    
+    draggedTaskRef.current = dragData;
+    
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", JSON.stringify(dragData));
+
+    e.dataTransfer.setDragImage(new Image(), 0, 0); 
   };
 
   const handleDropOnCalendar = (e, dateStr) => {
