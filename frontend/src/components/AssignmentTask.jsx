@@ -1,9 +1,19 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, Typography, Card, CardContent, CircularProgress, Collapse, Button } from '@mui/material';
-import { ChevronDown, CheckCircle2, Circle, Sparkles, ChevronUp, RefreshCw } from 'lucide-react';
+import { ChevronDown, CheckCircle2, Circle, Sparkles, ChevronUp, RefreshCw, CalendarIcon} from 'lucide-react';
 
-export default function AssignmentTask({task, handleDragStart, toggleTaskExpansion, toggleTask, localAssignment, handleTimer, activeTab}){
-    const[isExpanded, setIsExpanded] = useState(false)
+export default function AssignmentTask({task, handleDragStart, toggleTaskExpansion, toggleTask, localAssignment, handleTimer, activeTab, scheduledTasks, isExpanded}){
+
+    let scheduledDate = null;
+    if (scheduledTasks) {
+        for (const [dateStr, dayTasks] of Object.entries(scheduledTasks)) {
+            if (dayTasks.some(t => t.id === task.id)) {
+                const d = new Date(dateStr);
+                scheduledDate = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                break;
+            }
+        }
+    }
 
     return (
         <div>
@@ -41,18 +51,34 @@ export default function AssignmentTask({task, handleDragStart, toggleTaskExpansi
                                 {task.label}
                             </Typography>
 
-                            {activeTab == 'timer'? 
+                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                                
+                                {/* Top Right: Time Pill & Chevron */}
                                 <div className="flex items-center gap-2">
-                                    {isExpanded ? <ChevronUp size={16} className="text-gray-400" onClick={() => setIsExpanded(isExpanded => !isExpanded)}/> : <ChevronDown size={16} className="text-gray-400" onClick={() => setIsExpanded(isExpanded => !isExpanded)}/>}
+                                    {activeTab !== 'timer' && (
+                                        <button  
+                                            className="bg-blue-50 hover:bg-blue-100 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap" 
+                                            onClick={(e) => { e.stopPropagation(); handleTimer(task); }} 
+                                            style={{ 
+                                                border: 'none', 
+                                                outline: 'none', 
+                                                boxShadow: 'none',
+                                                WebkitTapHighlightColor: 'transparent'
+                                            }}>
+                                            {task.time}
+                                        </button>
+                                    )}
+                                    {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
                                 </div>
-                                :
-                                <div className="flex items-center gap-2 ">
-                                    <button  className="bg-blue-50 hover:bg-blue-150  text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap" onClick={() => handleTimer(task)}>
-                                        {task.estTime}
-                                    </button>
-                                    {isExpanded ? <ChevronUp size={16} className="text-gray-400" onClick={() => setIsExpanded(isExpanded => !isExpanded)}/> : <ChevronDown size={16} className="text-gray-400" onClick={() => setIsExpanded(isExpanded => !isExpanded)}/>}
-                                </div>
-                            }        
+
+                                {/* Bottom Right: Scheduled Date */}
+                                {scheduledDate && !task.completed && (
+                                    <div className="flex items-center gap-1 text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+                                        <CalendarIcon size={10} />
+                                        {scheduledDate}
+                                    </div>
+                                )}
+                            </Box>  
                     </div>
         
                     {/* Collapsible Content */}

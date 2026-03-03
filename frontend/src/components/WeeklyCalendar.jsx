@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Box, Typography, IconButton } from '@mui/material';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
-export default function WeeklyCalendar({ scheduledTasks, onDropTask, onRemoveTask, onToggleTask, onClearDay, variant = 'detail', onGroupClick, assignments = [] }) {
+export default function WeeklyCalendar({ scheduledTasks, onDropTask, onRemoveTask, onToggleTask, onClearDay, variant = 'detail', onGroupClick, assignments = [], localAssignment }) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   // helpers
@@ -47,6 +47,16 @@ export default function WeeklyCalendar({ scheduledTasks, onDropTask, onRemoveTas
     e.stopPropagation();
   };
 
+  const handleInternalDragStart = (e, task, sourceDate) => {
+    const dragData = {
+      ...task,
+      sourceDate: sourceDate,
+      isInternalMove: true
+    };
+    e.dataTransfer.setData("text/plain", JSON.stringify(dragData));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
   return (
     <>
       {/* Week Navigation */}
@@ -79,6 +89,16 @@ export default function WeeklyCalendar({ scheduledTasks, onDropTask, onRemoveTas
           const dayNum = date.getDate();
           const tasksForDay = scheduledTasks[dateStr] || [];
           const isTodayDate = isToday(date);
+
+          let currentAssignmentTasks = [];
+
+          if (variant === 'detail') {
+            tasksForDay.forEach(task => {
+              if (task.id.includes(`task-${localAssignment?.id}`)) {
+                currentAssignmentTasks.push(task);
+              }
+            });
+          }
 
           const groupedTasks = {};
           if (variant === 'main') {
@@ -124,9 +144,16 @@ export default function WeeklyCalendar({ scheduledTasks, onDropTask, onRemoveTas
                         isUrgent: isUrgent,
                         color: task.color || '#3b82f6',
                         total: 0,
-                        completed: 0
+                        completed: 0,
+                        totalMinutes: 0
                     };
                   }
+
+                  if (task.time) {
+                      const mins = parseInt(task.time) || 0;
+                      groupedTasks[assignId].totalMinutes += mins;
+                  }
+
                   groupedTasks[assignId].total += 1;
                   if (task.completed) groupedTasks[assignId].completed += 1;
               });
@@ -162,29 +189,32 @@ export default function WeeklyCalendar({ scheduledTasks, onDropTask, onRemoveTas
                 </Typography>
 
                 {/* CLEAR DAY BUTTON - Absolute Right */}
-                {tasksForDay.length > 0 && (
+                {(variant === 'main' ? tasksForDay.length > 0 : currentAssignmentTasks.length > 0) && (
                   <Box 
                     className="clear-day-btn"
-                    onClick={(e) => { e.stopPropagation(); onClearDay(dateStr); }}
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      onClearDay(dateStr, variant === 'detail' ? localAssignment?.id : null); 
+                    }}
                     sx={{ 
                       opacity: 0, 
                       visibility: 'hidden',
-                      position: 'absolute', // Floating so it doesn't break centering
-                      right: 18,             // Pushed to the right edge
+                      position: 'absolute', 
+                      right: 18,            
                       top: '50%',
-                      transform: 'translateY(-50%)', // Centers it vertically with the text
+                      transform: 'translateY(-50%)', 
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       bgcolor: '#fee2e2', 
                       color: '#ef4444', 
                       borderRadius: '50%', 
-                      p: '2px', // Slightly smaller padding so it fits well 
+                      p: '2px', 
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
                       '&:hover': { bgcolor: '#fca5a5', color: '#b91c1c' }
                     }}
-                    title="Clear all tasks for this day"
+                    title={variant === 'detail' ? "Clear tasks for this assignment" : "Clear all tasks for this day"}
                   >
                     <X size={10} strokeWidth={3} />
                   </Box>
@@ -218,6 +248,21 @@ export default function WeeklyCalendar({ scheduledTasks, onDropTask, onRemoveTas
                                 '&:hover': { borderColor: group.color }
                              }}
                           >
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
+                              <Typography sx={{ 
+                                fontSize: '9px', 
+                                fontWeight: 800, 
+                                color: isAllDone ? '#d1d5db' : group.color,
+                                bgcolor: isAllDone ? 'transparent' : `${group.color}10`,
+                                px: 0.5,
+                                borderRadius: '4px'
+                              }}>
+                                {group.totalMinutes >= 60 
+                                  ? `${Math.floor(group.totalMinutes / 60)}h ${group.totalMinutes % 60}m` 
+                                  : `${group.totalMinutes}m`}
+                              </Typography>
+                            </Box>
+                              
                             {/* Title */}
                              <Typography sx={{ fontSize: '10px', fontWeight: 800, color: isAllDone ? '#9ca3af' : (group.isUrgent ? '#ef4444' : '#1f2937'), lineHeight: 1.2, mb: 0.25, display: '-webkit-box', overflow: 'hidden', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2 }}>
                                  {group.title}
@@ -238,9 +283,10 @@ export default function WeeklyCalendar({ scheduledTasks, onDropTask, onRemoveTas
                              </Box>
 
                              {/* Progress */}
-                             <Typography sx={{ fontSize: '9px', fontWeight: 'bold', color: isAllDone ? '#9ca3af' : '#1f2937', textAlign: 'center' }}>
-                                 {group.completed}/{group.total} Done
-                             </Typography>
+                            <Typography sx={{ fontSize: '9px', fontWeight: 'bold', color: isAllDone ? '#9ca3af' : '#1f2937' }}>
+                              {group.completed}/{group.total} Done
+                            </Typography>                              
+                            
                              <Box sx={{ width: '100%', height: '4px', bgcolor: isAllDone ? '#d1d5db' : '#f3f4f6', borderRadius: '2px', overflow: 'hidden' }}>
                                  <Box sx={{ width: `${(group.completed / group.total) * 100}%`, height: '100%', bgcolor: isAllDone ? '#9ca3af' : group.color, transition: 'width 0.3s' }} />
                              </Box>
@@ -248,59 +294,111 @@ export default function WeeklyCalendar({ scheduledTasks, onDropTask, onRemoveTas
                        )
                    })
                 ) : (
-                   /* DETAIL MODE: Render Individual Tasks (What you currently have) */
-                   tasksForDay.map((task) => (
-                    <Box 
-                      key={task.id}
-                      className="group"
-                      draggable={true} 
-                      onDragStart={(e) => {
-                        e.dataTransfer.effectAllowed = "move";
-                        e.dataTransfer.setData("text/plain", JSON.stringify(task));
-                      }}
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        onToggleTask(null, task.id); 
-                      }}
-                      sx={{
-                          bgcolor: task.completed ? '#f3f4f6' : 'white', border: '1px solid',
-                          borderColor: task.completed ? '#e5e7eb' : '#f3f4f6', borderRadius: '4px',
-                          p: 0.5, cursor: 'pointer', borderLeft: `3px solid ${task.completed ? '#d1d5db' : task.color}`,
-                          fontSize: '9px', fontWeight: 500, color: task.completed ? '#9ca3af' : '#374151', 
-                          boxShadow: task.completed ? 'none' : '0 1px 2px rgba(0,0,0,0.05)',
-                          position: 'relative', display: 'flex', alignItems: 'center', gap: 0.5,
-                          transition: 'all 0.2s ease',
-                          '&:hover .remove-btn': { display: 'flex' }
-                      }}
-                    >
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: task.completed ? 'line-through' : 'none' }}>
-                          {task.label}
-                      </span>
+                   /* DETAIL MODE: Render Individual Tasks */
+                  <>
+                    {/* 1. Show summary message for OTHER assignments scheduled today at the TOP */}
+                    {(() => {
+                      const otherTasksTime = tasksForDay
+                        .filter(task => !task.id.includes(`task-${localAssignment?.id}`))
+                        .reduce((acc, curr) => acc + (parseInt(curr.time) || 0), 0);
 
-                      {task.time && (
+                      return otherTasksTime > 0 ? (
                         <Box sx={{ 
-                          fontSize: '7px', 
-                          fontWeight: 'bold', 
-                          color: task.completed ? '#9ca3af' : '#6b7280', 
-                          bgcolor: task.completed ? 'transparent' : '#f3f4f6', 
-                          px: 0.5, 
-                          py: 0.25, 
+                          width: '100%',
+                          mb: 1, 
+                          p: 0.5, 
+                          bgcolor: '#f9fafb', 
                           borderRadius: '4px',
-                          flexShrink: 0
+                          border: '1px solid #e5e7eb',
+                          borderLeft: '3px solid #d1d5db',
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          minHeight: '22px',
+                          boxSizing: 'border-box'
                         }}>
-                          {task.time}
+                          <Typography sx={{ 
+                            fontSize: '8px', 
+                            color: '#6b7280', 
+                            fontWeight: 700, 
+                            textAlign: 'left',
+                            ml: 0.5, 
+                            lineHeight: 1.2,
+                            letterSpacing: '0.2px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {otherTasksTime >= 60 
+                              ? `${Math.floor(otherTasksTime / 60)}h ${otherTasksTime % 60}m` 
+                              : `${otherTasksTime}m`} of Other Work
+                          </Typography>
                         </Box>
-                      )}
+                      ) : null;
+                    })()}
 
-                      <Box 
-                        className="remove-btn" 
-                        onClick={(e) => { e.stopPropagation(); onRemoveTask(dateStr, task.id); }}
-                        sx={{ display: 'none', position: 'absolute', right: 2, top: '50%', transform: 'translateY(-50%)', bgcolor: '#fff', borderRadius: '50%', p: 0.5, boxShadow: 1 }}
-                      >
-                        <X size={10} color="#ef4444" />
-                      </Box>
-                    </Box>
-                  ))
+                    {/* 2. Show detailed blocks ONLY for current assignment tasks BELOW the summary */}
+                    {tasksForDay
+                      .filter(task => task.id.includes(`task-${localAssignment?.id}`))
+                      .map((task) => (
+                        <Box 
+                          key={task.id}
+                          className="group"
+                          draggable={true} 
+                          onDragStart={(e) => handleInternalDragStart(e, task, dateStr)}
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            onToggleTask(null, task.id); 
+                          }}
+                          sx={{
+                              bgcolor: task.completed ? '#f3f4f6' : 'white', 
+                              border: '1px solid',
+                              borderColor: task.completed ? '#e5e7eb' : '#f3f4f6', 
+                              borderRadius: '4px',
+                              p: 0.5, 
+                              cursor: 'pointer', 
+                              borderLeft: `3px solid ${task.completed ? '#d1d5db' : task.color}`,
+                              fontSize: '9px', 
+                              fontWeight: 500, 
+                              color: task.completed ? '#9ca3af' : '#374151', 
+                              boxShadow: task.completed ? 'none' : '0 1px 2px rgba(0,0,0,0.05)',
+                              position: 'relative', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: 0.5,
+                              transition: 'all 0.2s ease',
+                              mb: 0.5, // Added small margin between subtasks
+                              '&:hover .remove-btn': { display: 'flex' }
+                          }}
+                        >
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: task.completed ? 'line-through' : 'none' }}>
+                              {task.label}
+                          </span>
+
+                          {task.time && (
+                            <Box sx={{ 
+                              fontSize: '7px', 
+                              fontWeight: 'bold', 
+                              color: task.completed ? '#9ca3af' : '#6b7280', 
+                              bgcolor: task.completed ? 'transparent' : '#f3f4f6', 
+                              px: 0.5, 
+                              py: 0.25, 
+                              borderRadius: '4px',
+                              flexShrink: 0
+                            }}>
+                              {task.time}
+                            </Box>
+                          )}
+
+                          <Box 
+                            className="remove-btn" 
+                            onClick={(e) => { e.stopPropagation(); onRemoveTask(dateStr, task.id); }}
+                            sx={{ display: 'none', position: 'absolute', right: 2, top: '50%', transform: 'translateY(-50%)', bgcolor: '#fff', borderRadius: '50%', p: 0.5, boxShadow: 1 }}
+                          >
+                            <X size={10} color="#ef4444" />
+                          </Box>
+                        </Box>
+                      ))}
+                  </>
                 )}
               </Box>
             </Box>

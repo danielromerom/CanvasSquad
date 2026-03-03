@@ -76,6 +76,22 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
 
     if (forceRegenerate) {
         setIsRegenerating(true);
+        
+        setScheduledTasks(prevSchedule => {
+          const newState = { ...prevSchedule };
+          
+          Object.keys(newState).forEach(dateStr => {
+            newState[dateStr] = newState[dateStr].filter(
+              t => !t.id.includes(`task-${selectedAssignmentId}`)
+            );
+            
+            if (newState[dateStr].length === 0) {
+              delete newState[dateStr];
+            }
+          });
+          
+          return newState;
+        });
     } else {
         setIsLoading(true);
     }
@@ -170,34 +186,82 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
   };
 
   const handleDropOnCalendar = (e, dateStr) => {
-    e.preventDefault(); e.stopPropagation(); 
-    const task = draggedTaskRef.current;
-    if (task) {
-      setScheduledTasks(prev => {
-        const newState = { ...prev };
-        Object.keys(newState).forEach(key => { newState[key] = newState[key].filter(t => t.id !== task.id); });
-        const currentDayTasks = newState[dateStr] || [];
-        newState[dateStr] = [...currentDayTasks, task];
-        return newState;
+  e.preventDefault();
+  e.stopPropagation();
+  
+  const rawData = e.dataTransfer.getData("text/plain");
+  if (!rawData) return;
+
+  const task = JSON.parse(rawData);
+
+  setScheduledTasks(prev => {
+    const newState = { ...prev };
+
+    // if moving internally, remove it from the old day first
+    if (task.isInternalMove && task.sourceDate) {
+      newState[task.sourceDate] = newState[task.sourceDate].filter(t => t.id !== task.id);
+    } 
+    // if dragging from the task list, remove it from ANY day it might already be in
+    else {
+      Object.keys(newState).forEach(day => {
+        newState[day] = newState[day].filter(t => t.id !== task.id);
       });
     }
-    draggedTaskRef.current = null;
-  };
+
+    // add to  new day
+    const currentDayTasks = newState[dateStr] || [];
+    newState[dateStr] = [...currentDayTasks, task];
+    
+    return newState;
+  });
+};
 
   const removeTaskFromDay = (dateStr, taskId) => {
     setScheduledTasks(prev => ({ ...prev, [dateStr]: prev[dateStr].filter(t => t.id !== taskId) }));
   };
 
-  const handleClearDay = (dateStr) => {
-    setScheduledTasks(prev => { const newState = { ...prev }; delete newState[dateStr]; return newState; });
+  const handleClearDay = (dateStr, assignmentId = null) => {
+    setScheduledTasks(prev => {
+      const newState = { ...prev };
+      
+      if (assignmentId) {
+        // ONLY remove tasks belonging to this specific assignment
+        newState[dateStr] = newState[dateStr].filter(
+          task => !task.id.includes(`task-${assignmentId}`)
+        );
+        
+        // If no tasks are left for that day at all, clean up the key
+        if (newState[dateStr].length === 0) {
+          delete newState[dateStr];
+        }
+      } else {
+        // Original behavior: delete everything for that day
+        delete newState[dateStr];
+      }
+      
+      return newState;
+    });
   };
 
   const toggleTask = (_, taskId) => {
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t));
+    // 1. Find out if we are checking it or un-checking it
+    const taskToToggle = tasks.find(t => t.id === taskId);
+    if (!taskToToggle) return;
+    const willBeCompleted = !taskToToggle.completed;
+
+    // 2. Update the Statistics
+    updateStatsOnTaskComplete(willBeCompleted, taskId);
+
+    // 3. Update the local task list state
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: willBeCompleted } : t));
+
+    // 4. Update the scheduled tasks (Calendar) state
     setScheduledTasks(prev => {
       const newState = { ...prev };
       Object.keys(newState).forEach(dateStr => {
-        newState[dateStr] = newState[dateStr].map(t => t.id === taskId ? { ...t, completed: !t.completed } : t);
+        newState[dateStr] = newState[dateStr].map(t => 
+          t.id === taskId ? { ...t, completed: willBeCompleted } : t
+        );
       });
       return newState;
     });
@@ -246,6 +310,61 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
     );
   }
 
+  const updateStatsOnTaskComplete = (isCompleting, taskId) => {
+    const today = new Date().toDateString();
+    let stats = JSON.parse(localStorage.getItem('userStats')) || {
+      totalTasksCompleted: 0,
+      currentStreak: 0,
+      lastActiveDate: null,
+      assignmentsCompleted: 0,
+      xp: 0
+    };
+
+    if (isCompleting) {
+      stats.totalTasksCompleted += 1;
+      stats.xp += 10; // 10 XP per task
+
+      // Check if this action completes the entire assignment
+      // We look at the 'tasks' state to see if only 1 task was left
+      const remainingTasks = tasks.filter(t => !t.completed && t.id !== taskId);
+      if (remainingTasks.length === 0) {
+        stats.assignmentsCompleted = (stats.assignmentsCompleted || 0) + 1;
+        stats.xp += 50; // Bonus 50 XP for finishing the whole assignment
+      }
+
+      // Handle Streak logic
+      if (stats.lastActiveDate !== today) {
+        if (!stats.lastActiveDate) {
+          stats.currentStreak = 1;
+        } else {
+          const lastDate = new Date(stats.lastActiveDate);
+          const currentDate = new Date(today);
+          const diffTime = Math.abs(currentDate - lastDate);
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          if (diffDays === 1) {
+            stats.currentStreak += 1;
+          } else if (diffDays > 1) {
+            stats.currentStreak = 1;
+          }
+        }
+        stats.lastActiveDate = today;
+      }
+    } else {
+      // Logic for un-checking a task (subtract XP)
+      stats.totalTasksCompleted = Math.max(0, stats.totalTasksCompleted - 1);
+      stats.xp = Math.max(0, stats.xp - 10);
+      
+      // If they were done and un-checked one, reduce assignment count
+      if (tasks.every(t => t.completed)) {
+        stats.assignmentsCompleted = Math.max(0, (stats.assignmentsCompleted || 0) - 1);
+        stats.xp = Math.max(0, stats.xp - 50);
+      }
+    }
+
+    localStorage.setItem('userStats', JSON.stringify(stats));
+  };
+
   return (
     <Box sx={{ height: '100%', overflowY: 'auto', pt: 1, pb: 8, pl: 2, pr: 2, maxWidth: '640px', mx: 'auto' }}>
       
@@ -270,13 +389,13 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
       )}
 
       <div className="mb-4">
-        <TabSwitcher variant="assignment" activeTab={activeTab} onTabChange={setActiveTab} setTimerTask={setTimerTask}/>
+        <TabSwitcher variant="assignment" activeTab={activeTab} onTabChange={setActiveTab} setTimerTask={(task) => { if (task) setTimerTask(task) }}/>
       </div>
 
-      {activeTab === 'tasks' && (
-        <>
+      {/* TASKS TAB (Hidden via CSS, keeps memory alive!) */}
+      <Box sx={{ display: activeTab === 'tasks' ? 'block' : 'none' }}>
             <div className="p-6 mb-6 shadow-md rounded-2xl text-white transition-all hover:shadow-lg" 
-                style={{ background: `linear-gradient(135deg, ${localAssignment?.color || '#3b82f6'} 0%, #000000 100%)` }}>
+                style={{ background: localAssignment?.color || '#3b82f6'}}>
               <p className="text-[10px] opacity-80 mb-1 uppercase tracking-widest font-bold">{localAssignment?.course}</p>
               <h2 className="text-2xl font-bold mb-4">{localAssignment?.title || 'Loading...'}</h2>
               <div className="flex justify-between text-sm font-medium opacity-90 mb-2">
@@ -288,7 +407,7 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
               </div>
             </div>
 
-            <WeeklyCalendar variant="detail" scheduledTasks={scheduledTasks} onDropTask={handleDropOnCalendar} onRemoveTask={removeTaskFromDay} onClearDay={handleClearDay} onToggleTask={toggleTask} />
+            <WeeklyCalendar variant="detail" scheduledTasks={scheduledTasks} onDropTask={handleDropOnCalendar} onRemoveTask={removeTaskFromDay} onClearDay={handleClearDay} onToggleTask={toggleTask} localAssignment={localAssignment} />
 
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, mt: 4 }}>
              <Typography variant="h6" sx={{ fontWeight: 800, color: '#1a1a1a' }}>Task Breakdown</Typography>
@@ -314,28 +433,26 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
                 tasks.map((task) => {
                   const isExpanded = expandedTasks.includes(task.id);
                   return(
-                    <AssignmentTask task={task} handleDragStart={handleDragStart} toggleTaskExpansion={toggleTaskExpansion} toggleTask={toggleTask} localAssignment={localAssignment} handleTimer={handleTimer} setTasks={setTasks}/>
+                    <AssignmentTask key={task.id} task={task} isExpanded={isExpanded} handleDragStart={handleDragStart} toggleTaskExpansion={toggleTaskExpansion} toggleTask={toggleTask} localAssignment={localAssignment} handleTimer={handleTimer} activeTab={activeTab} scheduledTasks={scheduledTasks} setTasks={setTasks}/>
                   )
               }))}
             </div>
           )}
-        </>
-      )}
+      </Box>
 
-      {activeTab === 'timer' && timerTask && 
-      <TimerPanel 
-      timerTask={timerTask} 
-      handleDragStart={handleDragStart}
-      toggleTaskExpansion={toggleTaskExpansion}
-      toggleTask={toggleTask}
-      localAssignment={localAssignment}
-      handleTimer={handleTimer}
-      activeTab={activeTab}
-      setTasks={setTasks}
-      /> || 
-      activeTab === 'timer' && (timerTask == null) && <TimerPanel />
-      }
-      {activeTab === 'stats' && <StatsPanel />}
+      {/* TIMER TAB (Timer ticks in the background when you are on Tasks tab!) */}
+      <Box sx={{ display: activeTab === 'timer' ? 'block' : 'none' }}>
+        <TimerPanel 
+          timerTask={timerTask ? (tasks.find(t => t.id === timerTask.id) || timerTask) : null} 
+          handleDragStart={handleDragStart}
+          toggleTaskExpansion={toggleTaskExpansion}
+          toggleTask={toggleTask}
+          localAssignment={localAssignment}
+          handleTimer={handleTimer}
+          activeTab={activeTab}
+          setTasks={setTasks}
+        />
+      </Box>
     </Box>
   );
 }
