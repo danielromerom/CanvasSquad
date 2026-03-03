@@ -1,4 +1,7 @@
 import requests
+import re # regex module
+import io
+from pypdf import PdfReader
 from urllib.parse import urljoin
 
 class CanvasClient:
@@ -12,6 +15,12 @@ class CanvasClient:
     def list_assignments(self, course_id):
         url = urljoin(self.base_url, f"/api/v1/courses/{course_id}/assignments")
         r = self.session.get(url, params={"per_page": 100})
+        r.raise_for_status()
+        return r.json()
+    
+    def get_assignment(self, course_id, assignment_id):
+        url = urljoin(self.base_url, f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
+        r = self.session.get(url)
         r.raise_for_status()
         return r.json()
 
@@ -45,5 +54,85 @@ class CanvasClient:
         r.raise_for_status()
         return r.json()
 
-''' http://127.0.0.1:8000/api/canvas/courses/255/assignments/ is the endpoint we use to get assignments for a course,
-it calls the list_assignments method in this client to fetch the data from canvas.'''
+
+    def extract_file_ids_from_assignment_description(self, description_html: str) -> list[int]:
+        if not description_html:
+            return []
+
+        # look for /files/<id>
+        ids = re.findall(r"/files/(\d+)", description_html)
+        seen = set()
+        out = []
+        for s in ids:
+            i = int(s)
+            if i not in seen:
+                seen.add(i)
+                out.append(i)
+        return out
+
+    def get_file_metadata(self, file_id: int):
+        url = urljoin(self.base_url, f"/api/v1/files/{file_id}")
+        r = self.session.get(url)
+        r.raise_for_status()
+        return r.json()
+
+    def download_file_bytes(self, download_url: str) -> bytes:
+        r = self.session.get(download_url, stream=True, timeout=30)
+        r.raise_for_status()
+        return r.content
+
+    def list_assignment_pdfs(self, course_id: int, assignment_id: int) -> list[dict]:
+        assignment = self.get_assignment(course_id, assignment_id)
+        description = assignment.get("description", "")
+
+        file_ids = self.extract_file_ids_from_assignment_description(description)
+        if not file_ids:
+            return []
+
+        pdfs = []
+        for file_id in file_ids:
+            meta = self.get_file_metadata(file_id)
+
+            filename = (meta.get("filename") or "").lower()
+            content_type = (meta.get("content-type") or meta.get("content_type") or "").lower()
+
+            is_pdf = (content_type == "application/pdf") or filename.endswith(".pdf")
+            if not is_pdf:
+                continue
+
+            pdfs.append({
+                "file_id": meta.get("id", file_id),
+                "filename": meta.get("filename"),
+                "content_type": meta.get("content-type") or meta.get("content_type"),
+                "size": meta.get("size"),
+                "download_url": meta.get("url"),
+                "display_name": meta.get("display_name"),
+            })
+
+        return pdfs
+    
+    # helper function for converting bytes to text
+    def pdf_bytes_to_text(self, pdf_bytes: bytes) -> str:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        parts = []
+        for page in reader.pages:
+            parts.append(page.extract_text() or "")
+        return "\n".join(parts).strip()
+    
+
+    def get_assignment_pdf_text(self, course_id: int, assignment_id: int, max_chars: int = 20000) -> str:
+        pdfs = self.list_assignment_pdfs(course_id, assignment_id)
+        if not pdfs:
+            raise ValueError("No PDFs found in assignment description.")
+
+        download_url = pdfs[0].get("download_url")
+        if not download_url:
+            raise ValueError("PDF metadata missing download_url.")
+
+        pdf_bytes = self.download_file_bytes(download_url)
+        text = self.pdf_bytes_to_text(pdf_bytes)
+
+        if max_chars and len(text) > max_chars:
+            text = text[:max_chars]
+
+        return text

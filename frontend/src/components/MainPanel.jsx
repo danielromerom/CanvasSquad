@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Box, Typography, Collapse, IconButton } from '@mui/material';
-import {Timer, BarChart3, ChevronLeft, ChevronRight, Sparkles, ChevronDown, ChevronRight as ChevronRightIcon, GripVertical, CheckCircle2, Circle, X} from 'lucide-react';
+import { Timer, BarChart3, ChevronLeft, ChevronRight, Sparkles, ChevronDown, ChevronRight as ChevronRightIcon, GripVertical, CheckCircle2, Circle, X } from 'lucide-react';
 import TabSwitcher from './TabSwitcher';
 import { API_BASE_URL, FETCH_HEADERS } from '../../config.js';
 import WeeklyCalendar from './WeeklyCalendar';
 import TimerPanel from './TimerPanel.jsx';
+import StatsPanel from './StatsPanel.jsx';
+
 const COURSE_COLORS = [
   '#3b82f6',
   '#8b5cf6',
@@ -17,14 +19,13 @@ const COURSE_COLORS = [
 
 const getCourseColor = (id) => {
   const numId = parseInt(id, 10) || 0;
-  
   const phi = 0.618033988749895;
   const index = Math.floor((numId * phi % 1) * COURSE_COLORS.length);
-  
   return COURSE_COLORS[index];
 };
 
-export default function MainPanel() {
+// Added filteredCourseId to the props
+export default function MainPanel({ filteredCourseId }) {
   const [currentTab, setCurrentTab] = useState('schedule');
 
   const [assignmentStartDate, setAssignmentStartDate] = useState(new Date());
@@ -68,7 +69,6 @@ export default function MainPanel() {
         );
         await Promise.all(syncPromises);
 
-        // fetch all assignments for all courses
         const assignmentPromises = courseList.map(async (course) => {
           const res = await fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/assignments/`, { headers: FETCH_HEADERS });
           if (!res.ok) return [];
@@ -99,7 +99,6 @@ export default function MainPanel() {
       if (isInitialLoading) return;
       setIsAssignmentsLoading(true);
 
-      // date boundaries based on state
       const start = new Date(assignmentStartDate);
       start.setHours(0, 0, 0, 0);
 
@@ -107,14 +106,19 @@ export default function MainPanel() {
       end.setDate(end.getDate() + assignmentTimeframe - 1);
       end.setHours(23, 59, 59, 999);
 
-      // filter within the timeframe
+      // Filter within the timeframe AND by course if filteredCourseId is present
       const filtered = allRawAssignments.filter(assign => {
         if (!assign.due_at) return false;
         const dueDate = new Date(assign.due_at);
-        return dueDate >= start && dueDate <= end;
+        const inTimeframe = dueDate >= start && dueDate <= end;
+
+        const matchesCourse = filteredCourseId 
+          ? String(assign.course_id) === String(filteredCourseId) 
+          : true;
+
+        return inTimeframe && matchesCourse;
       });
 
-      // sort by due date ascending
       filtered.sort((a, b) => new Date(a.due_at) - new Date(b.due_at));
 
       const locallyCompletedIds = new Set();
@@ -151,7 +155,6 @@ export default function MainPanel() {
                       id: frontendTaskId,
                       label: t.title,
                       time: t.estimated_minutes ? `${t.estimated_minutes}m` : '15m', 
-
                       completed: t.is_completed || locallyCompletedIds.has(frontendTaskId)
                   };
               })
@@ -163,9 +166,9 @@ export default function MainPanel() {
     };
 
     filterAndHydrate();
-  }, [allRawAssignments, assignmentStartDate, assignmentTimeframe, isInitialLoading]);
+    // Re-run whenever the course ID filter changes
+  }, [allRawAssignments, assignmentStartDate, assignmentTimeframe, isInitialLoading, filteredCourseId]);
 
-  // assignment date navigation handlers
   const moveAssignmentDate = (direction) => {
     const newDate = new Date(assignmentStartDate);
     newDate.setDate(newDate.getDate() + (direction * assignmentTimeframe));
@@ -184,7 +187,6 @@ export default function MainPanel() {
 
   const dateRangeText = `${assignmentStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${assignmentEndText.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
   
-  // handler for accordion assignment
   const toggleAccordion = (id) => {
     setExpandedIds(prev => 
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
@@ -198,13 +200,24 @@ export default function MainPanel() {
   };
 
   const toggleAssignmentTask = (_, taskId) => {
-    
+    let isCurrentlyCompleted = false;
+    for (const assign of assignments) {
+      const task = assign.tasks.find(t => t.id === taskId);
+      if (task) {
+        isCurrentlyCompleted = task.completed;
+        break;
+      }
+    }
+    const willBeCompleted = !isCurrentlyCompleted;
+
+    updateStatsOnTaskComplete(willBeCompleted, taskId);
+
     setAssignments(prevAssignments => {
       return prevAssignments.map(assign => ({
         ...assign,
         tasks: assign.tasks.map(t => {
           if (t.id === taskId) {
-            return { ...t, completed: !t.completed }; 
+            return { ...t, completed: willBeCompleted }; 
           }
           return t;
         })
@@ -213,44 +226,77 @@ export default function MainPanel() {
 
     setScheduledTasks(prevSchedule => {
       const newState = { ...prevSchedule };
-      
-      let isTaskCurrentlyCompleted = false;
-      for (const date of Object.values(prevSchedule)) {
-        const found = date.find(task => task.id === taskId);
-        if (found) {
-          isTaskCurrentlyCompleted = found.completed;
-          break;
-        }
-      }
-      if (!isTaskCurrentlyCompleted) {
-        for (const assign of assignments) {
-          const foundInList = assign.tasks.find(t => t.id === taskId);
-          if (foundInList) {
-              isTaskCurrentlyCompleted = foundInList.completed;
-              break;
-          }
-        }
-      }
-
-      const exactNewState = !isTaskCurrentlyCompleted;
-
       Object.keys(newState).forEach(dateStr => {
         newState[dateStr] = newState[dateStr].map(t => {
           if (t.id === taskId) {
-            return { ...t, completed: exactNewState };
+            return { ...t, completed: willBeCompleted };
           }
           return t;
         });
       });
-      
       return newState;
     });
   };
-  
-  // drag and drop
+
+  const updateStatsOnTaskComplete = (isCompleting, taskId) => {
+      const today = new Date().toDateString();
+      let stats = JSON.parse(localStorage.getItem('userStats')) || {
+          totalTasksCompleted: 0,
+          currentStreak: 0,
+          lastActiveDate: null,
+          assignmentsCompleted: 0,
+          xp: 0
+      };
+
+      if (isCompleting) {
+          stats.totalTasksCompleted += 1;
+          stats.xp += 10; 
+
+          const parentAssign = assignments.find(a => a.tasks.some(t => t.id === taskId));
+          if (parentAssign) {
+              const completedCount = parentAssign.tasks.filter(t => t.completed).length;
+              if (completedCount + 1 === parentAssign.tasks.length) {
+                  stats.assignmentsCompleted = (stats.assignmentsCompleted || 0) + 1;
+                  stats.xp += 50;
+              }
+          }
+
+          if (stats.lastActiveDate !== today) {
+              if (!stats.lastActiveDate) {
+                  stats.currentStreak = 1;
+              } else {
+                  const lastDate = new Date(stats.lastActiveDate);
+                  const currentDate = new Date(today);
+                  const diffTime = Math.abs(currentDate - lastDate);
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+                  if (diffDays === 1) {
+                      stats.currentStreak += 1; 
+                  } else if (diffDays > 1) {
+                      stats.currentStreak = 1; 
+                  }
+              }
+              stats.lastActiveDate = today;
+          }
+      } else {
+          stats.totalTasksCompleted = Math.max(0, stats.totalTasksCompleted - 1);
+          stats.xp = Math.max(0, stats.xp - 10); 
+          
+          const parentAssign = assignments.find(a => a.tasks.some(t => t.id === taskId));
+          if (parentAssign) {
+              const completedCount = parentAssign.tasks.filter(t => t.completed).length;
+              if (completedCount === parentAssign.tasks.length) {
+                  stats.assignmentsCompleted = Math.max(0, (stats.assignmentsCompleted || 0) - 1);
+                  stats.xp = Math.max(0, stats.xp - 50);
+              }
+          }
+      }
+
+      localStorage.setItem('userStats', JSON.stringify(stats));
+  };
+
   const handleDragStart = (e, task, courseColor) => {
-    draggedTaskRef.current = { ...task, color: courseColor, completed: false };
-    
+    draggedTaskRef.current = { ...task, color: courseColor };
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", JSON.stringify({ ...task, color: courseColor }));
   };
@@ -303,43 +349,31 @@ export default function MainPanel() {
 
     let tasksScheduled = 0;
 
-    // Process tasks grouped BY ASSIGNMENT so we preserve chronological order
     assignments.forEach(assign => {
-      // Get strictly the unscheduled tasks for THIS assignment
       const pendingTasks = assign.tasks.filter(task => !task.completed && !alreadyScheduledIds.has(task.id));
       if (pendingTasks.length === 0) return;
 
-      // Determine valid days: From Today until the day BEFORE it's due
       const validDays = [];
       let currentDate = new Date(today);
       const dueDate = new Date(assign.raw_due_at);
       dueDate.setHours(0, 0, 0, 0);
 
-      // If it's due today or overdue, all tasks must be scheduled today
       if (dueDate <= today) {
           validDays.push(new Date(today));
       } else {
-          // Otherwise, collect every day from today until the deadline
           while (currentDate < dueDate) {
               validDays.push(new Date(currentDate));
               currentDate.setDate(currentDate.getDate() + 1);
           }
       }
 
-      // Distribute tasks chronologically across the available days
       pendingTasks.forEach((task, index) => {
-        // Math magic to evenly space steps. 
-        // e.g., 4 tasks over 3 days maps to: Day 1, Day 1, Day 2, Day 3
         const dayIndex = Math.floor((index / pendingTasks.length) * validDays.length);
         const scheduledDay = validDays[dayIndex];
         const dateStr = scheduledDay.toDateString();
 
         if (!newSchedule[dateStr]) newSchedule[dateStr] = [];
-        newSchedule[dateStr].push({
-          ...task,
-          color: assign.color
-        });
-        
+        newSchedule[dateStr].push({ ...task, color: assign.color });
         tasksScheduled++;
       });
     });
@@ -353,36 +387,29 @@ export default function MainPanel() {
   
   return (
     <Box sx={{ pt: 2, pb: 4, pl: 1.5, pr: 1.5, maxWidth: '640px', mx: 'auto' }}>
-      
-
-      {/* tab switch */}
       <div className="mb-6 px-2">
-        <TabSwitcher 
-          variant="main" 
-          activeTab={currentTab} 
-          onTabChange={setCurrentTab} 
-          setTimerTask={setTimerTask}
-        />
+        <TabSwitcher variant="main" activeTab={currentTab} onTabChange={setCurrentTab} setTimerTask={setTimerTask} />
       </div>
 
       <Box sx={{ px: 1 }}>
-        
         {currentTab === 'schedule' && (
           <>
             <WeeklyCalendar 
+              variant="main"
+              assignments={assignments}
               scheduledTasks={scheduledTasks}
               onDropTask={handleDropOnCalendar}
               onRemoveTask={removeTaskFromDay}
-              onToggleTask={toggleAssignmentTask}
               onClearDay={handleClearDay}
+              onToggleTask={toggleAssignmentTask}
+              onGroupClick={(assignmentId) => {
+                 const assign = assignments.find(a => String(a.canvas_assignment_id) === String(assignmentId) || String(a.id) === String(assignmentId));
+                 if (assign) openAssignmentLink(assign);
+              }}
             />
 
             <Box sx={{ mb: 2 }}>
-                
-              {/* Header Row */}
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                
-                {/* Title and Date Grouped Together */}
                 <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5 }}>
                   <Typography variant="subtitle1" fontWeight="bold" color="#1f2937" sx={{ lineHeight: 1 }}>
                     Assignments
@@ -399,13 +426,7 @@ export default function MainPanel() {
                 </button>
               </Box>
 
-              {/* Date Range Text */}
-              
-
-              {/* Navigation Bar */}
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  
-                {/* Timeframe Dropdown */}
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
                   <select 
                      value={assignmentTimeframe} 
@@ -419,21 +440,13 @@ export default function MainPanel() {
                   </select>
                 </Box>
 
-                {/* Arrows */}
                 <Box sx={{ display: 'flex', gap: 0.5 }}>
                   <IconButton onClick={() => moveAssignmentDate(-1)} size="small" sx={{ p: 0.5, bgcolor: 'white', border: '1px solid #e5e7eb' }}><ChevronLeft size={16} /></IconButton>
-                  <button 
-                      onClick={resetAssignmentDate} 
-                      style={{ background: '#e0e7ff', color: '#4f46e5', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
-                  >
-                      Today
-                  </button>
+                  <button onClick={resetAssignmentDate} style={{ background: '#e0e7ff', color: '#4f46e5', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>Today</button>
                   <IconButton onClick={() => moveAssignmentDate(1)} size="small" sx={{ p: 0.5, bgcolor: 'white', border: '1px solid #e5e7eb' }}><ChevronRight size={16} /></IconButton>
                 </Box>
               </Box>
-
             </Box>
-
 
             {isInitialLoading || isAssignmentsLoading ? (
                <Box sx={{ textAlign: 'center', py: 4 }}>
@@ -453,109 +466,42 @@ export default function MainPanel() {
                   Object.values(scheduledTasks).flat().forEach(t => { if (assignment.tasks.some(at => at.id === t.id)) scheduledCount++; });
 
                   return (
-                    <div key={assignment.id} style={{ border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden', background: 'white' }}>
-                      
-                      {/* Accordion Header */}
-                      <div 
-                        onClick={() => hasTasks ? toggleAccordion(assignment.id) : null}
-                        style={{ padding: '16px', display: 'flex', gap: '12px', cursor: 'pointer' }}
-                      >
+                    <div key={assignment.id} style={{ border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden', background: 'white', marginBottom: '12px' }}>
+                      <div onClick={() => hasTasks ? toggleAccordion(assignment.id) : null} style={{ padding: '16px', display: 'flex', gap: '12px', cursor: 'pointer' }}>
                         <div style={{ width: '4px', height: '40px', backgroundColor: assignment.color, borderRadius: '4px', flexShrink: 0}} />
-                        
                         <div style={{ flexGrow: 1 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div>
-                          <h4 
-                              style={{ 
-                                margin: 0, 
-                                fontSize: '14px', 
-                                fontWeight: 'bold', 
-                                color: '#111827',
-                                cursor: 'pointer',
-                                transition: 'text-decoration 0.2s'
-                              }}
-                              className="hover:underline"
-                              onClick={(e) => { e.stopPropagation(); openAssignmentLink(assignment); }}
-                            >
-                              {assignment.title}
-                            </h4>
-                                <p style={{ margin: 0, fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{assignment.course}</p>
+                              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#111827', cursor: 'pointer' }} className="hover:underline" onClick={(e) => { e.stopPropagation(); openAssignmentLink(assignment); }}>{assignment.title}</h4>
+                              <p style={{ margin: 0, fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{assignment.course}</p>
                             </div>
                             <div style={{ color: '#9ca3af' }}>
-                              {hasTasks ? (
-                                  isExpanded ? <ChevronDown size={18} /> : <ChevronRightIcon size={18} />
-                              ) : (
-                                  <div 
-                                    onClick={(e) => { e.stopPropagation(); openAssignmentLink(assignment); }}
-                                    style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#2563eb', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', background: '#eff6ff', padding: '4px 8px', borderRadius: '6px' }}
-                                  >
-                                    <Sparkles size={12} />
-                                    <span>Generate Plan</span>
+                              {hasTasks ? (isExpanded ? <ChevronDown size={18} /> : <ChevronRightIcon size={18} />) : (
+                                  <div onClick={(e) => { e.stopPropagation(); openAssignmentLink(assignment); }} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#2563eb', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', background: '#eff6ff', padding: '4px 8px', borderRadius: '6px' }}>
+                                    <Sparkles size={12} /><span>Generate Plan</span>
                                   </div>
-                              )}                            </div>
+                              )}
+                            </div>
                           </div>
                           <div style={{ marginTop: '4px', display: 'flex', gap: '12px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
                             <span>Due: {assignment.due}</span>
-                            {hasTasks && (
-                                <span style={{ color: scheduledCount === totalSubtasks ? '#16a34a' : '#9ca3af' }}>
-                                    {scheduledCount}/{totalSubtasks} scheduled
-                                </span>
-                            )}
+                            {hasTasks && (<span style={{ color: scheduledCount === totalSubtasks ? '#16a34a' : '#9ca3af' }}>{scheduledCount}/{totalSubtasks} scheduled</span>)}
                           </div>
                         </div>
                       </div>
-
-                      {/* Accordion Body */}
                       <Collapse in={isExpanded}>
                         <div style={{ background: '#f9fafb', padding: '8px', borderTop: '1px solid #f3f4f6' }}>
                           {assignment.tasks.map((task) => (
-                            <Box 
-                              key={task.id}
-                              draggable={true}
-                              onDragStart={(e) => handleDragStart(e, task, assignment.color)}
-                              onDragEnd={handleDragEnd}
-                              sx={{ 
-                                  bgcolor: 'white', 
-                                  border: '1px solid #e5e7eb', 
-                                  borderRadius: '8px', 
-                                  p: 1, 
-                                  mb: 1, 
-                                  display: 'flex', 
-                                  justifyContent: 'space-between', 
-                                  alignItems: 'center', 
-                                  cursor: 'grab', 
-                                  userSelect: 'none',
-                                  transition: 'border-color 0.2s',
-                                  '&:hover': { borderColor: '#a5b4fc' },
-                                  '&:hover .grip-icon': { color: '#6b7280' }
-                              }}
-                            >
-                              {/* Left Side: Checkbox + Text */}
+                            <Box key={task.id} draggable={true} onDragStart={(e) => handleDragStart(e, task, assignment.color)} onDragEnd={handleDragEnd}
+                              sx={{ bgcolor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', p: 1, mb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab', userSelect: 'none', transition: 'border-color 0.2s', '&:hover': { borderColor: '#a5b4fc' }, '&:hover .grip-icon': { color: '#6b7280' } }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                
-                                {/* CHECKBOX: Click to toggle */}
-                                <div 
-                                  onClick={(e) => {
-                                    e.stopPropagation(); // Stop drag from starting
-                                    toggleAssignmentTask(assignment.id, task.id);
-                                  }}
-                                  style={{ cursor: 'pointer', display: 'flex' }}
-                                >
-                                  {task.completed ? 
-                                    <CheckCircle2 size={18} color="#10b981" /> : 
-                                    <Circle size={18} color="#d1d5db" />
-                                  }
+                                <div onClick={(e) => { e.stopPropagation(); toggleAssignmentTask(assignment.id, task.id); }} style={{ cursor: 'pointer', display: 'flex' }}>
+                                  {task.completed ? <CheckCircle2 size={18} color="#10b981" /> : <Circle size={18} color="#d1d5db" />}
                                 </div>
-
-                                <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500, textDecoration: task.completed ? 'line-through' : 'none' }}>
-                                  {task.label}
-                                </span>
+                                <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500, textDecoration: task.completed ? 'line-through' : 'none' }}>{task.label}</span>
                               </div>
-
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '11px', color: '#9ca3af', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
-                                  {task.time}
-                                </span>
+                                <span style={{ fontSize: '11px', color: '#9ca3af', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>{task.time}</span>
                                 <GripVertical size={14} className="grip-icon" color="#d1d5db" />
                               </div>
                             </Box>
@@ -566,21 +512,10 @@ export default function MainPanel() {
                   );
                 })
               )}
-            </>
+          </>
         )}
-
-        {/* Placeholders for other tabs */}
-        {currentTab === 'timer' && (
-          <TimerPanel />
-        )}
-
-        {currentTab === 'stats' && (
-          <Box sx={{ textAlign: 'center', p: 5, border: '2px dashed #e5e7eb', borderRadius: 4, mt: 4, bgcolor: 'white' }}>
-            <BarChart3 className="mx-auto" size={40} color="#d1d5db" />
-            <Typography color="#9ca3af" fontWeight={500}>Stats Coming Soon</Typography>
-          </Box>
-        )}
-
+        {currentTab === 'timer' && <TimerPanel />}
+        {currentTab === 'stats' && <StatsPanel />}
       </Box>
     </Box>
   );

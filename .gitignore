@@ -83,3 +83,7 @@ htmlcov/
 # Misc
 .cache/
 *.bak
+
+# SQLITE db files
+db.sqlite3
+*.sqlite3
