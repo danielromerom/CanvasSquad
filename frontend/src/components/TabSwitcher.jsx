@@ -1,25 +1,26 @@
-import { Calendar, Timer, BarChart3, ListTodo } from 'lucide-react';
+import { Calendar, Timer, BarChart3, ListTodo, LayoutList } from 'lucide-react';
 
 const TAB_CONFIG = {
   main: [
     { id: 'schedule', label: 'Schedule', icon: Calendar },
+    { id: 'daily',    label: 'Daily',    icon: LayoutList },
     { id: 'timer',    label: 'Timer',    icon: Timer },
     { id: 'stats',    label: 'Stats',    icon: BarChart3 },
   ],
   assignment: [
     { id: 'tasks',    label: 'Tasks',    icon: ListTodo },
     { id: 'timer',    label: 'Timer',    icon: Timer },
-    { id: 'stats',    label: 'Stats',    icon: BarChart3 },
   ]
 };
 
   const handleTabChange = (tabId, onTabChange, setTimerTask) =>{
     onTabChange(tabId)
 
-    if(tabId != 'timer'){
-      setTimerTask(() => null)
+    if (typeof setTimerTask === 'function') {
+      if (tabId !== 'timer') {
+        setTimerTask(null);
+      }
     }
-    
   }
 
 export default function TabSwitcher({ 
@@ -31,7 +32,7 @@ export default function TabSwitcher({
   const tabs = TAB_CONFIG[variant];
 
   return (
-    <div className="bg-[#f4f4f5] p-1 rounded-full flex items-center justify-between w-full max-w-[320px] mx-auto">
+    <div className="bg-[#f4f4f5] p-1 rounded-full flex items-center justify-between w-full max-w-[440px] mx-auto shadow-inner">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         const Icon = tab.icon;

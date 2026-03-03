@@ -32,14 +32,11 @@ export default function MainPanel({ filteredCourseId }) {
   const [assignmentTimeframe, setAssignmentTimeframe] = useState(7);
 
   const [allRawAssignments, setAllRawAssignments] = useState([]);
+  const [allHydratedAssignments, setAllHydratedAssignments] = useState([]); // NEW: For the Calendar
   const [assignments, setAssignments] = useState([]);
   
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isAssignmentsLoading, setIsAssignmentsLoading] = useState(true);
-
-  const [expandedIds, setExpandedIds] = useState([]); 
-
-  const [timerTask, setTimerTask] = useState(null);
 
   const [scheduledTasks, setScheduledTasks] = useState(() => {
     const saved = localStorage.getItem('scheduledTasks');
@@ -99,74 +96,52 @@ export default function MainPanel({ filteredCourseId }) {
       if (isInitialLoading) return;
       setIsAssignmentsLoading(true);
 
+      // 1. First, hydrate EVERY raw assignment so the calendar always has data
+      const hydrated = await Promise.all(allRawAssignments.map(async (assign) => {
+        let tasks = [];
+        const taskIdToUse = assign.canvas_assignment_id || assign.id; 
+        try {
+          const taskRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${taskIdToUse}/tasks/`, { headers: FETCH_HEADERS });
+          if (taskRes.ok) {
+            const taskData = await taskRes.json();
+            tasks = taskData.tasks || [];
+          }
+        } catch (err) { console.warn(err); }
+
+        return {
+          id: `assign-${assign.course_id}-${assign.id}`,
+          course: assign.course_name,
+          canvas_assignment_id: assign.canvas_assignment_id,
+          canvas_course_id: assign.course_id,
+          title: assign.title,
+          color: getCourseColor(assign.course_id),
+          raw_due_at: assign.due_at,
+          due: new Date(assign.due_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute:'2-digit' }),
+          tasks: tasks.map(t => ({ id: `task-${taskIdToUse}-${t.id}`, label: t.title, completed: t.is_completed }))
+        };
+      }));
+
+      setAllHydratedAssignments(hydrated); // The master list for the Calendar
+
+      // 2. Now filter that master list for the UI cards below the calendar
       const start = new Date(assignmentStartDate);
       start.setHours(0, 0, 0, 0);
-
       const end = new Date(start);
       end.setDate(end.getDate() + assignmentTimeframe - 1);
       end.setHours(23, 59, 59, 999);
 
-      // Filter within the timeframe AND by course if filteredCourseId is present
-      const filtered = allRawAssignments.filter(assign => {
-        if (!assign.due_at) return false;
-        const dueDate = new Date(assign.due_at);
+      const filtered = hydrated.filter(assign => {
+        const dueDate = new Date(assign.raw_due_at);
         const inTimeframe = dueDate >= start && dueDate <= end;
-
-        const matchesCourse = filteredCourseId 
-          ? String(assign.course_id) === String(filteredCourseId) 
-          : true;
-
+        const matchesCourse = filteredCourseId ? String(assign.canvas_course_id) === String(filteredCourseId) : true;
         return inTimeframe && matchesCourse;
       });
 
-      filtered.sort((a, b) => new Date(a.due_at) - new Date(b.due_at));
-
-      const locallyCompletedIds = new Set();
-      Object.values(scheduledTasks).flat().forEach(t => {
-          if (t.completed) locallyCompletedIds.add(t.id);
-      });
-
-      const hydrated = await Promise.all(filtered.map(async (assign) => {
-          let tasks = [];
-          const taskIdToUse = assign.canvas_assignment_id || assign.id; 
-
-          try {
-              const taskRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${taskIdToUse}/tasks/`, { headers: FETCH_HEADERS });
-              if (taskRes.ok) {
-                  const taskData = await taskRes.json();
-                  tasks = taskData.tasks || [];
-              }
-          } catch (err) {
-              console.warn(`Could not fetch tasks for assignment ${assign.id}`, err);
-          }
-
-          return {
-              id: `assign-${assign.course_id}-${assign.id}`,
-              course: assign.course_name,
-              canvas_assignment_id: assign.canvas_assignment_id,
-              canvas_course_id: assign.course_id,
-              title: assign.title,
-              color: getCourseColor(assign.course_id),
-              raw_due_at: assign.due_at,
-              due: new Date(assign.due_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute:'2-digit' }),
-              tasks: tasks.map((t) => {
-                  const frontendTaskId = `task-${taskIdToUse}-${t.id}`;
-                  return {
-                      id: frontendTaskId,
-                      label: t.title,
-                      time: t.estimated_minutes ? `${t.estimated_minutes}m` : '15m', 
-                      completed: t.is_completed || locallyCompletedIds.has(frontendTaskId)
-                  };
-              })
-          };
-      }));
-
-      setAssignments(hydrated);
+      setAssignments(filtered); // The filtered list for the Cards
       setIsAssignmentsLoading(false);
     };
 
     filterAndHydrate();
-    // Re-run whenever the course ID filter changes
   }, [allRawAssignments, assignmentStartDate, assignmentTimeframe, isInitialLoading, filteredCourseId]);
 
   const moveAssignmentDate = (direction) => {
@@ -187,119 +162,107 @@ export default function MainPanel({ filteredCourseId }) {
 
   const dateRangeText = `${assignmentStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${assignmentEndText.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
   
-  const toggleAccordion = (id) => {
-    setExpandedIds(prev => 
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
-  };
-
   const openAssignmentLink = (assign) => {
       const cID = assign.canvas_course_id;
       const aID = assign.canvas_assignment_id;
       window.open(`https://ufldev.instructure.com/courses/${cID}/assignments/${aID}`, '_blank');
   };
 
-  const toggleAssignmentTask = (_, taskId) => {
-    let isCurrentlyCompleted = false;
-    for (const assign of assignments) {
-      const task = assign.tasks.find(t => t.id === taskId);
-      if (task) {
-        isCurrentlyCompleted = task.completed;
-        break;
-      }
-    }
-    const willBeCompleted = !isCurrentlyCompleted;
+  // const toggleAssignmentTask = (_, taskId) => {
+  //   let isCurrentlyCompleted = false;
+  //   for (const assign of assignments) {
+  //     const task = assign.tasks.find(t => t.id === taskId);
+  //     if (task) {
+  //       isCurrentlyCompleted = task.completed;
+  //       break;
+  //     }
+  //   }
+  //   const willBeCompleted = !isCurrentlyCompleted;
 
-    updateStatsOnTaskComplete(willBeCompleted, taskId);
+  //   // updateStatsOnTaskComplete(willBeCompleted, taskId);
 
-    setAssignments(prevAssignments => {
-      return prevAssignments.map(assign => ({
-        ...assign,
-        tasks: assign.tasks.map(t => {
-          if (t.id === taskId) {
-            return { ...t, completed: willBeCompleted }; 
-          }
-          return t;
-        })
-      }));
-    });
+  //   setAssignments(prevAssignments => {
+  //     return prevAssignments.map(assign => ({
+  //       ...assign,
+  //       tasks: assign.tasks.map(t => {
+  //         if (t.id === taskId) {
+  //           return { ...t, completed: willBeCompleted }; 
+  //         }
+  //         return t;
+  //       })
+  //     }));
+  //   });
 
-    setScheduledTasks(prevSchedule => {
-      const newState = { ...prevSchedule };
-      Object.keys(newState).forEach(dateStr => {
-        newState[dateStr] = newState[dateStr].map(t => {
-          if (t.id === taskId) {
-            return { ...t, completed: willBeCompleted };
-          }
-          return t;
-        });
-      });
-      return newState;
-    });
-  };
+  //   setScheduledTasks(prevSchedule => {
+  //     const newState = { ...prevSchedule };
+  //     Object.keys(newState).forEach(dateStr => {
+  //       newState[dateStr] = newState[dateStr].map(t => {
+  //         if (t.id === taskId) {
+  //           return { ...t, completed: willBeCompleted };
+  //         }
+  //         return t;
+  //       });
+  //     });
+  //     return newState;
+  //   });
+  // };
 
-  const updateStatsOnTaskComplete = (isCompleting, taskId) => {
-      const today = new Date().toDateString();
-      let stats = JSON.parse(localStorage.getItem('userStats')) || {
-          totalTasksCompleted: 0,
-          currentStreak: 0,
-          lastActiveDate: null,
-          assignmentsCompleted: 0,
-          xp: 0
-      };
+  // const updateStatsOnTaskComplete = (isCompleting, taskId) => {
+  //     const today = new Date().toDateString();
+  //     let stats = JSON.parse(localStorage.getItem('userStats')) || {
+  //         totalTasksCompleted: 0,
+  //         currentStreak: 0,
+  //         lastActiveDate: null,
+  //         assignmentsCompleted: 0,
+  //         xp: 0
+  //     };
 
-      if (isCompleting) {
-          stats.totalTasksCompleted += 1;
-          stats.xp += 10; 
+  //     if (isCompleting) {
+  //         stats.totalTasksCompleted += 1;
+  //         stats.xp += 10; 
 
-          const parentAssign = assignments.find(a => a.tasks.some(t => t.id === taskId));
-          if (parentAssign) {
-              const completedCount = parentAssign.tasks.filter(t => t.completed).length;
-              if (completedCount + 1 === parentAssign.tasks.length) {
-                  stats.assignmentsCompleted = (stats.assignmentsCompleted || 0) + 1;
-                  stats.xp += 50;
-              }
-          }
+  //         const parentAssign = assignments.find(a => a.tasks.some(t => t.id === taskId));
+  //         if (parentAssign) {
+  //             const completedCount = parentAssign.tasks.filter(t => t.completed).length;
+  //             if (completedCount + 1 === parentAssign.tasks.length) {
+  //                 stats.assignmentsCompleted = (stats.assignmentsCompleted || 0) + 1;
+  //                 stats.xp += 50;
+  //             }
+  //         }
 
-          if (stats.lastActiveDate !== today) {
-              if (!stats.lastActiveDate) {
-                  stats.currentStreak = 1;
-              } else {
-                  const lastDate = new Date(stats.lastActiveDate);
-                  const currentDate = new Date(today);
-                  const diffTime = Math.abs(currentDate - lastDate);
-                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+  //         if (stats.lastActiveDate !== today) {
+  //             if (!stats.lastActiveDate) {
+  //                 stats.currentStreak = 1;
+  //             } else {
+  //                 const lastDate = new Date(stats.lastActiveDate);
+  //                 const currentDate = new Date(today);
+  //                 const diffTime = Math.abs(currentDate - lastDate);
+  //                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
 
-                  if (diffDays === 1) {
-                      stats.currentStreak += 1; 
-                  } else if (diffDays > 1) {
-                      stats.currentStreak = 1; 
-                  }
-              }
-              stats.lastActiveDate = today;
-          }
-      } else {
-          stats.totalTasksCompleted = Math.max(0, stats.totalTasksCompleted - 1);
-          stats.xp = Math.max(0, stats.xp - 10); 
+  //                 if (diffDays === 1) {
+  //                     stats.currentStreak += 1; 
+  //                 } else if (diffDays > 1) {
+  //                     stats.currentStreak = 1; 
+  //                 }
+  //             }
+  //             stats.lastActiveDate = today;
+  //         }
+  //     } else {
+  //         stats.totalTasksCompleted = Math.max(0, stats.totalTasksCompleted - 1);
+  //         stats.xp = Math.max(0, stats.xp - 10); 
           
-          const parentAssign = assignments.find(a => a.tasks.some(t => t.id === taskId));
-          if (parentAssign) {
-              const completedCount = parentAssign.tasks.filter(t => t.completed).length;
-              if (completedCount === parentAssign.tasks.length) {
-                  stats.assignmentsCompleted = Math.max(0, (stats.assignmentsCompleted || 0) - 1);
-                  stats.xp = Math.max(0, stats.xp - 50);
-              }
-          }
-      }
+  //         const parentAssign = assignments.find(a => a.tasks.some(t => t.id === taskId));
+  //         if (parentAssign) {
+  //             const completedCount = parentAssign.tasks.filter(t => t.completed).length;
+  //             if (completedCount === parentAssign.tasks.length) {
+  //                 stats.assignmentsCompleted = Math.max(0, (stats.assignmentsCompleted || 0) - 1);
+  //                 stats.xp = Math.max(0, stats.xp - 50);
+  //             }
+  //         }
+  //     }
 
-      localStorage.setItem('userStats', JSON.stringify(stats));
-  };
-
-  const handleDragStart = (e, task, courseColor) => {
-    draggedTaskRef.current = { ...task, color: courseColor };
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", JSON.stringify({ ...task, color: courseColor }));
-  };
+  //     localStorage.setItem('userStats', JSON.stringify(stats));
+  // };
 
   const handleDropOnCalendar = (e, dateStr) => {
     e.preventDefault();
@@ -320,10 +283,6 @@ export default function MainPanel({ filteredCourseId }) {
     draggedTaskRef.current = null;
   };
 
-  const handleDragEnd = () => {
-    draggedTaskRef.current = null;
-  };
-
   const removeTaskFromDay = (dateStr, taskId) => {
     setScheduledTasks(prev => ({
       ...prev,
@@ -339,56 +298,56 @@ export default function MainPanel({ filteredCourseId }) {
     });
   };
 
-  const handleAutoSchedule = () => {
-    const alreadyScheduledIds = new Set();
-    Object.values(scheduledTasks).flat().forEach(t => alreadyScheduledIds.add(t.id));
+  // const handleAutoSchedule = () => {
+  //   const alreadyScheduledIds = new Set();
+  //   Object.values(scheduledTasks).flat().forEach(t => alreadyScheduledIds.add(t.id));
 
-    const newSchedule = { ...scheduledTasks };
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  //   const newSchedule = { ...scheduledTasks };
+  //   const today = new Date();
+  //   today.setHours(0, 0, 0, 0);
 
-    let tasksScheduled = 0;
+  //   let tasksScheduled = 0;
 
-    assignments.forEach(assign => {
-      const pendingTasks = assign.tasks.filter(task => !task.completed && !alreadyScheduledIds.has(task.id));
-      if (pendingTasks.length === 0) return;
+  //   assignments.forEach(assign => {
+  //     const pendingTasks = assign.tasks.filter(task => !task.completed && !alreadyScheduledIds.has(task.id));
+  //     if (pendingTasks.length === 0) return;
 
-      const validDays = [];
-      let currentDate = new Date(today);
-      const dueDate = new Date(assign.raw_due_at);
-      dueDate.setHours(0, 0, 0, 0);
+  //     const validDays = [];
+  //     let currentDate = new Date(today);
+  //     const dueDate = new Date(assign.raw_due_at);
+  //     dueDate.setHours(0, 0, 0, 0);
 
-      if (dueDate <= today) {
-          validDays.push(new Date(today));
-      } else {
-          while (currentDate < dueDate) {
-              validDays.push(new Date(currentDate));
-              currentDate.setDate(currentDate.getDate() + 1);
-          }
-      }
+  //     if (dueDate <= today) {
+  //         validDays.push(new Date(today));
+  //     } else {
+  //         while (currentDate < dueDate) {
+  //             validDays.push(new Date(currentDate));
+  //             currentDate.setDate(currentDate.getDate() + 1);
+  //         }
+  //     }
 
-      pendingTasks.forEach((task, index) => {
-        const dayIndex = Math.floor((index / pendingTasks.length) * validDays.length);
-        const scheduledDay = validDays[dayIndex];
-        const dateStr = scheduledDay.toDateString();
+  //     pendingTasks.forEach((task, index) => {
+  //       const dayIndex = Math.floor((index / pendingTasks.length) * validDays.length);
+  //       const scheduledDay = validDays[dayIndex];
+  //       const dateStr = scheduledDay.toDateString();
 
-        if (!newSchedule[dateStr]) newSchedule[dateStr] = [];
-        newSchedule[dateStr].push({ ...task, color: assign.color });
-        tasksScheduled++;
-      });
-    });
+  //       if (!newSchedule[dateStr]) newSchedule[dateStr] = [];
+  //       newSchedule[dateStr].push({ ...task, color: assign.color });
+  //       tasksScheduled++;
+  //     });
+  //   });
 
-    if (tasksScheduled === 0) {
-      alert("All active tasks are already scheduled!");
-    } else {
-      setScheduledTasks(newSchedule);
-    }
-  };
+  //   if (tasksScheduled === 0) {
+  //     alert("All active tasks are already scheduled!");
+  //   } else {
+  //     setScheduledTasks(newSchedule);
+  //   }
+  // };
   
   return (
     <Box sx={{ pt: 2, pb: 4, pl: 1.5, pr: 1.5, maxWidth: '640px', mx: 'auto' }}>
       <div className="mb-6 px-2">
-        <TabSwitcher variant="main" activeTab={currentTab} onTabChange={setCurrentTab} setTimerTask={setTimerTask} />
+        <TabSwitcher variant="main" activeTab={currentTab} onTabChange={setCurrentTab} />
       </div>
 
       <Box sx={{ px: 1 }}>
@@ -396,14 +355,14 @@ export default function MainPanel({ filteredCourseId }) {
           <>
             <WeeklyCalendar 
               variant="main"
-              assignments={assignments}
+              assignments={allHydratedAssignments}
               scheduledTasks={scheduledTasks}
               onDropTask={handleDropOnCalendar}
               onRemoveTask={removeTaskFromDay}
               onClearDay={handleClearDay}
-              onToggleTask={toggleAssignmentTask}
+              // onToggleTask={toggleAssignmentTask}
               onGroupClick={(assignmentId) => {
-                 const assign = assignments.find(a => String(a.canvas_assignment_id) === String(assignmentId) || String(a.id) === String(assignmentId));
+                 const assign = allHydratedAssignments.find(a => String(a.canvas_assignment_id) === String(assignmentId) || String(a.id) === String(assignmentId));
                  if (assign) openAssignmentLink(assign);
               }}
             />
@@ -419,11 +378,11 @@ export default function MainPanel({ filteredCourseId }) {
                   </Typography>
                 </Box>
 
-                <button 
+                {/* <button 
                 onClick={handleAutoSchedule}
                 style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#000', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}>
                   <Sparkles size={12} /> Auto
-                </button>
+                </button> */}
               </Box>
 
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -458,57 +417,39 @@ export default function MainPanel({ filteredCourseId }) {
                </Box>
             ) : (
               assignments.map((assignment) => {
-                  const isExpanded = expandedIds.includes(assignment.id);
-                  const totalSubtasks = assignment.tasks.length;
-                  const hasTasks = totalSubtasks > 0;
+                  // const isExpanded = expandedIds.includes(assignment.id);
+                  // const totalSubtasks = assignment.tasks.length;
+                  // const hasTasks = totalSubtasks > 0;
 
-                  let scheduledCount = 0;
-                  Object.values(scheduledTasks).flat().forEach(t => { if (assignment.tasks.some(at => at.id === t.id)) scheduledCount++; });
+                  // let scheduledCount = 0;
+                  // Object.values(scheduledTasks).flat().forEach(t => { if (assignment.tasks.some(at => at.id === t.id)) scheduledCount++; });
 
                   return (
-                    <div key={assignment.id} style={{ border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden', background: 'white', marginBottom: '12px' }}>
-                      <div onClick={() => hasTasks ? toggleAccordion(assignment.id) : null} style={{ padding: '16px', display: 'flex', gap: '12px', cursor: 'pointer' }}>
-                        <div style={{ width: '4px', height: '40px', backgroundColor: assignment.color, borderRadius: '4px', flexShrink: 0}} />
-                        <div style={{ flexGrow: 1 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div>
-                              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#111827', cursor: 'pointer' }} className="hover:underline" onClick={(e) => { e.stopPropagation(); openAssignmentLink(assignment); }}>{assignment.title}</h4>
-                              <p style={{ margin: 0, fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{assignment.course}</p>
-                            </div>
-                            <div style={{ color: '#9ca3af' }}>
-                              {hasTasks ? (isExpanded ? <ChevronDown size={18} /> : <ChevronRightIcon size={18} />) : (
-                                  <div onClick={(e) => { e.stopPropagation(); openAssignmentLink(assignment); }} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#2563eb', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', background: '#eff6ff', padding: '4px 8px', borderRadius: '6px' }}>
-                                    <Sparkles size={12} /><span>Generate Plan</span>
-                                  </div>
-                              )}
-                            </div>
+                    <div 
+                    key={assignment.id} 
+                    onClick={() => openAssignmentLink(assignment)} 
+                    style={{ border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden', background: 'white', marginBottom: '12px', cursor: 'pointer', transition: 'border-color 0.2s' }}
+                    onMouseEnter={(e) => e.currentTarget.style.borderColor = '#a5b4fc'}
+                    onMouseLeave={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+                  >
+                    <div style={{ padding: '16px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      <div style={{ width: '4px', height: '40px', backgroundColor: assignment.color, borderRadius: '4px', flexShrink: 0}} />
+                      <div style={{ flexGrow: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div>
+                            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#111827' }} className="hover:underline">{assignment.title}</h4>
+                            <p style={{ margin: 0, fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{assignment.course}</p>
                           </div>
-                          <div style={{ marginTop: '4px', display: 'flex', gap: '12px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
-                            <span>Due: {assignment.due}</span>
-                            {hasTasks && (<span style={{ color: scheduledCount === totalSubtasks ? '#16a34a' : '#9ca3af' }}>{scheduledCount}/{totalSubtasks} scheduled</span>)}
+                          <div style={{ color: '#9ca3af', display: 'flex', alignItems: 'center' }}>
+                            <ChevronRightIcon size={18} />
                           </div>
+                        </div>
+                        <div style={{ marginTop: '4px', display: 'flex', gap: '12px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
+                          <span>Due: {assignment.due}</span>
                         </div>
                       </div>
-                      <Collapse in={isExpanded}>
-                        <div style={{ background: '#f9fafb', padding: '8px', borderTop: '1px solid #f3f4f6' }}>
-                          {assignment.tasks.map((task) => (
-                            <Box key={task.id} draggable={true} onDragStart={(e) => handleDragStart(e, task, assignment.color)} onDragEnd={handleDragEnd}
-                              sx={{ bgcolor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', p: 1, mb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab', userSelect: 'none', transition: 'border-color 0.2s', '&:hover': { borderColor: '#a5b4fc' }, '&:hover .grip-icon': { color: '#6b7280' } }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div onClick={(e) => { e.stopPropagation(); toggleAssignmentTask(assignment.id, task.id); }} style={{ cursor: 'pointer', display: 'flex' }}>
-                                  {task.completed ? <CheckCircle2 size={18} color="#10b981" /> : <Circle size={18} color="#d1d5db" />}
-                                </div>
-                                <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500, textDecoration: task.completed ? 'line-through' : 'none' }}>{task.label}</span>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '11px', color: '#9ca3af', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>{task.time}</span>
-                                <GripVertical size={14} className="grip-icon" color="#d1d5db" />
-                              </div>
-                            </Box>
-                          ))}
-                        </div>
-                      </Collapse>
                     </div>
+                  </div>
                   );
                 })
               )}

@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState } from "react";
 import Timer from "./Timer"
 import InformationContainer from "./InformationContainer";
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
@@ -7,12 +7,45 @@ import resetLogo from "../assets/reset.svg"
 import ProgressBar from "./ProgressBar";
 import AssignmentTask from "./AssignmentTask";
 
-export default function CountdownTimer({currentSession, sessionMinutes, timerTask, handleDragStart, toggleTaskExpansion, toggleTask, localAssignment, handleTimer, activeTab}){
-    const [minutes, setMinutes] = useState(sessionMinutes);
+export default function CountdownTimer({currentSession, sessionMinutes, timerTask, handleDragStart, toggleTask, localAssignment, handleTimer, activeTab}){
+
+    const getStartingMinutes = () => {
+        if (currentSession === "Focus" && timerTask && timerTask.time) {
+            return parseInt(timerTask.time);
+        }
+        return sessionMinutes;
+    };
+
+    const trueStartingMinutes = getStartingMinutes();
+
+    const [minutes, setMinutes] = useState(trueStartingMinutes);
     const [seconds, setSeconds] = useState(0);
     const [tensSeconds, setTensSeconds] = useState(0);
     const [isRunning, setIsRunning] = useState(false);
-    const [progress, setProgress] = useState(0);
+
+    const [isTaskExpanded, setIsTaskExpanded] = useState(false);
+
+    const [prevTaskId, setPrevTaskId] = useState(timerTask?.id);
+    const [prevSessionMin, setPrevSessionMin] = useState(sessionMinutes);
+
+    const isNewTask = timerTask && timerTask.id !== prevTaskId;
+    const isNewSessionType = sessionMinutes !== prevSessionMin;
+
+    if (isNewTask || isNewSessionType) {
+        setPrevTaskId(timerTask?.id); 
+        setPrevSessionMin(sessionMinutes);
+        
+        setMinutes(trueStartingMinutes);
+        setSeconds(0);
+        setTensSeconds(0);
+        setIsRunning(false);
+    }
+
+    const convertToSeconds = (minutes * 60) + (tensSeconds * 10) + seconds;
+    const totalSessionSeconds = (trueStartingMinutes * 60);
+
+    const rawProgress = totalSessionSeconds > 0 ? ((1 - (convertToSeconds / totalSessionSeconds)) * 100) : 0;
+    const progress = Math.min(Math.max(rawProgress, 0), 100);
 
     const [focusMinutes, setFocusMinutes] = useState(()=>{
         const saved = localStorage.getItem('focusMinutes');
@@ -23,51 +56,7 @@ export default function CountdownTimer({currentSession, sessionMinutes, timerTas
         return saved ? Number(JSON.parse(saved)) : 0;
     })
 
-    useEffect(() => {
-        localStorage.setItem('focusMinutes', JSON.stringify(focusMinutes));
-        localStorage.setItem('completedSessions', JSON.stringify(completedSessions));
-      }, [focusMinutes, completedSessions]);
-    
-
-    useEffect(() => {
-        setMinutes(sessionMinutes)
-        setSeconds(0)
-        setTensSeconds(0)
-        setIsRunning(false)
-        setProgress(0)
-    },[sessionMinutes])
-
-    useEffect(() => {
-        let interval;
-
-        if(isRunning){
-            calculateProgress()
-            interval = setInterval(() =>{
-                if(seconds > 0){
-                    setSeconds((seconds)=> seconds-1);
-                }else if(tensSeconds > 0){
-                    setTensSeconds((tensSeconds) => tensSeconds-1)
-                    setSeconds(9);
-                }
-                else{
-                    if (minutes === 0) {
-                        setIsRunning(false);
-                        setFocusMinutes((focusMinutes) => focusMinutes+sessionMinutes)
-                        setCompletedSessions((completedSession) => completedSession+1)
-                    } else {
-                        setMinutes((minutes) => minutes - 1);
-                        setTensSeconds(5);
-                        setSeconds(9);
-                    }
-                }
-            }, 1000);
-        }
-
-        return () => clearInterval(interval);
-    }, [seconds, minutes, tensSeconds, isRunning])
-
-
-    //Start, pause, reset functions
+    //Start, pause, reset functions helpers
     function startTimer(){
         if(minutes !== 0 || tensSeconds !== 0 || seconds !== 0){
             setIsRunning(true)
@@ -80,19 +69,79 @@ export default function CountdownTimer({currentSession, sessionMinutes, timerTas
 
     function resetTimer(){
         setIsRunning(false)
-        setMinutes(sessionMinutes)
+        setMinutes(trueStartingMinutes)
         setTensSeconds(0)
         setSeconds(0)
-        setProgress(0)
     }
     
+    useEffect(() => {
+        localStorage.setItem('focusMinutes', JSON.stringify(focusMinutes));
+        localStorage.setItem('completedSessions', JSON.stringify(completedSessions));
 
-     function calculateProgress(){
-        const convertToSeconds = ((minutes*60) + (tensSeconds*10)+ seconds)
-        const sessionMinToSec = (sessionMinutes*60);
-        const progressPercentage = ((1- (convertToSeconds/sessionMinToSec)) *100)
-        setProgress(progressPercentage)
-    }
+        const updateGlobalStats = () => {
+            const rawStats = localStorage.getItem('userStats');
+            let stats = rawStats ? JSON.parse(rawStats) : {
+                totalTasksCompleted: 0,
+                currentStreak: 0,
+                lastActiveDate: null,
+                assignmentsCompleted: 0,
+                xp: 0,
+                totalFocusMinutes: 0,
+                totalSessions: 0
+            };
+
+        };
+
+      }, [focusMinutes, completedSessions]);
+    
+
+    useEffect(() => {
+        let interval;
+
+        if(isRunning){
+            interval = setInterval(() =>{
+                if(seconds > 0){
+                    setSeconds((seconds)=> seconds-1);
+                }else if(tensSeconds > 0){
+                    setTensSeconds((tensSeconds) => tensSeconds-1)
+                    setSeconds(9);
+                }
+                else{
+                    if (minutes === 0) {
+                        setIsRunning(false);
+                        
+                        const sessionMinsToAdd = parseInt(trueStartingMinutes);
+                        
+                        setFocusMinutes(prev => prev + sessionMinsToAdd);
+                        setCompletedSessions(prev => prev + 1);
+
+                        const rawStats = localStorage.getItem('userStats');
+                        let stats = rawStats ? JSON.parse(rawStats) : {
+                            totalTasksCompleted: 0,
+                            currentStreak: 0,
+                            lastActiveDate: null,
+                            assignmentsCompleted: 0,
+                            xp: 0,
+                            totalFocusMinutes: 0,
+                            totalSessions: 0
+                        };
+
+                        stats.totalFocusMinutes = (stats.totalFocusMinutes || 0) + sessionMinsToAdd;
+                        stats.totalSessions = (stats.totalSessions || 0) + 1;
+                        stats.xp = (stats.xp || 0) + (sessionMinsToAdd * 2);
+
+                        localStorage.setItem('userStats', JSON.stringify(stats));
+                    } else {
+                        setMinutes((minutes) => minutes - 1);
+                        setTensSeconds(5);
+                        setSeconds(9);
+                    }
+                }
+            }, 1000);
+        }
+
+        return () => clearInterval(interval);
+    }, [seconds, minutes, tensSeconds, isRunning, trueStartingMinutes]);
 
     return(
         <>
@@ -132,8 +181,7 @@ export default function CountdownTimer({currentSession, sessionMinutes, timerTas
                 </div>
             </div>
 
-            {timerTask?  <div className="mb-4"><AssignmentTask task={timerTask} handleDragStart={handleDragStart} toggleTaskExpansion={toggleTaskExpansion} toggleTask={toggleTask} localAssignment={localAssignment} handleTimer={handleTimer} activeTab={activeTab}/> </div> :null}
-            
+            {timerTask ? <div className="mb-4"><AssignmentTask task={timerTask} isExpanded={isTaskExpanded} toggleTaskExpansion={() => setIsTaskExpanded(!isTaskExpanded)} handleDragStart={handleDragStart} toggleTask={toggleTask} localAssignment={localAssignment} handleTimer={handleTimer} activeTab={activeTab}/> </div> : null}            
             <div className="flex-grow overflow-y-auto space-y-3 pr-1 pb-4 custom-scrollbar">
                     <InformationContainer focusMinutes={focusMinutes} completedSessions={completedSessions}/>
             </div>

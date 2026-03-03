@@ -1,5 +1,4 @@
 import ToggleTimer from "./ToggleTimer";
-import { useState } from "react";
 export default function TimerPanel({timerTask, handleDragStart, toggleTaskExpansion, toggleTask, localAssignment, handleTimer, activeTab}){
 
     return(

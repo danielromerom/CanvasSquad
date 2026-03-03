@@ -1,18 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
-import { Sparkles, Timer, CheckCircle2, Flame, BookOpen } from 'lucide-react';
+import { Sparkles, Timer, CheckCircle2, Flame, BookOpen, Coffee } from 'lucide-react';
 
 export default function StatsPanel() {
-  const [stats] = useState(() => {
+  
+  function loadStats() {
     const savedStats = JSON.parse(localStorage.getItem('userStats')) || {};
     return {
       totalFocusMinutes: savedStats.totalFocusMinutes || 0,
       totalTasksCompleted: savedStats.totalTasksCompleted || 0,
       currentStreak: savedStats.currentStreak || 0,
       assignmentsCompleted: savedStats.assignmentsCompleted || 0,
+      totalSessions: savedStats.totalSessions || 0,
       xp: savedStats.xp || 0
     };
-  });
+  }
+
+  const [stats, setStats] = useState(() => loadStats());
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setStats(loadStats());
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('statsUpdated', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('statsUpdated', handleStorageChange);
+    };
+  }, []);
 
   // Gamification 
   const XP_PER_LEVEL = 1500;
@@ -74,56 +92,53 @@ export default function StatsPanel() {
       {/* Stats */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2 }}>
         
-        {/* Focus Mins */}
-        <Box sx={{ bgcolor: 'white', p: 2.5, borderRadius: '16px', border: '1px solid #f3f4f6', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-          <Box sx={{ bgcolor: '#eff6ff', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+        {/* Focus Time */}
+        <Box sx={{ bgcolor: 'white', p: 2, borderRadius: '16px', border: '1px solid #f3f4f6' }}>
+          <Box sx={{ bgcolor: '#eff6ff', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1.5 }}>
             <Timer size={16} color="#3b82f6" />
           </Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#111827', mb: 0.5 }}>
-            {stats.totalFocusMinutes}
+          <Typography variant="h5" fontWeight="bold" sx={{ color: '#111827' }}>
+            {stats.totalFocusMinutes >= 60 
+              ? `${Math.floor(stats.totalFocusMinutes / 60)}h ${stats.totalFocusMinutes % 60}m` 
+              : `${stats.totalFocusMinutes}m`}
           </Typography>
-          <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Focus Mins
-          </Typography>
+          <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Focus Time</Typography>
         </Box>
 
-        {/* Tasks Done */}
-        <Box sx={{ bgcolor: 'white', p: 2.5, borderRadius: '16px', border: '1px solid #f3f4f6', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-          <Box sx={{ bgcolor: '#ecfdf5', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+        {/* Sessions */}
+        <Box sx={{ bgcolor: 'white', p: 2, borderRadius: '16px', border: '1px solid #f3f4f6' }}>
+          <Box sx={{ bgcolor: '#fff1f2', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1.5 }}>
+            <Coffee size={16} color="#f43f5e" />
+          </Box>
+          <Typography variant="h5" fontWeight="bold" sx={{ color: '#111827' }}>{stats.totalSessions}</Typography>
+          <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Sessions</Typography>
+        </Box>
+
+        {/* Tasks */}
+        <Box sx={{ bgcolor: 'white', p: 2, borderRadius: '16px', border: '1px solid #f3f4f6' }}>
+          <Box sx={{ bgcolor: '#ecfdf5', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1.5 }}>
             <CheckCircle2 size={16} color="#10b981" />
           </Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#111827', mb: 0.5 }}>
-            {stats.totalTasksCompleted}
-          </Typography>
-          <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Tasks Done
-          </Typography>
+          <Typography variant="h5" fontWeight="bold" sx={{ color: '#111827' }}>{stats.totalTasksCompleted}</Typography>
+          <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Tasks Done</Typography>
         </Box>
 
-        {/* Day Streak */}
-        <Box sx={{ bgcolor: 'white', p: 2.5, borderRadius: '16px', border: '1px solid #f3f4f6', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-          <Box sx={{ bgcolor: '#fff7ed', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+        {/* Streak */}
+        <Box sx={{ bgcolor: 'white', p: 2, borderRadius: '16px', border: '1px solid #f3f4f6' }}>
+          <Box sx={{ bgcolor: '#fff7ed', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1.5 }}>
             <Flame size={16} color="#f97316" />
           </Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#111827', mb: 0.5 }}>
-            {stats.currentStreak}
-          </Typography>
-          <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Day Streak
-          </Typography>
+          <Typography variant="h5" fontWeight="bold" sx={{ color: '#111827' }}>{stats.currentStreak}</Typography>
+          <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Day Streak</Typography>
         </Box>
 
         {/* Assignments */}
-        <Box sx={{ bgcolor: 'white', p: 2.5, borderRadius: '16px', border: '1px solid #f3f4f6', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-          <Box sx={{ bgcolor: '#f5f3ff', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+        <Box sx={{ bgcolor: 'white', p: 2, borderRadius: '16px', border: '1px solid #f3f4f6' }}>
+          <Box sx={{ bgcolor: '#f5f3ff', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1.5 }}>
             <BookOpen size={16} color="#8b5cf6" />
           </Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#111827', mb: 0.5 }}>
-            {stats.assignmentsCompleted}
-          </Typography>
-          <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Assignments
-          </Typography>
+          <Typography variant="h5" fontWeight="bold" sx={{ color: '#111827', mb: 0.5 }}>{stats.assignmentsCompleted}</Typography>
+          <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Assignments</Typography>
         </Box>
 
       </Box>
