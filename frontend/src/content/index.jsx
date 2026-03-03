@@ -51,6 +51,8 @@ setInterval(() => {
     const mainLayout = document.getElementById('main');
     const myWidget = document.getElementById('agency-native-widget');
     
+    const nativeSidebarWrapper = document.getElementById('right-side-wrapper');
+
     // The widget should now show on Dashboard, Assignment pages, or Course pages
     const shouldShowWidget = isDashboard || isAssignment || isCourseView;
 

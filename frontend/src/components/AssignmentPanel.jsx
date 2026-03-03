@@ -138,7 +138,7 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
              return {
                  id: frontendTaskId, 
                  label: t.title, 
-                 estTime: t.estimated_minutes ? `${t.estimated_minutes}m` : '15m',
+                 time: t.estimated_minutes ? `${t.estimated_minutes}m` : '15m',
                  completed: t.is_completed || locallyCompletedIds.has(frontendTaskId),
                  aiSummary: t.ai_insight || null, 
                  description: t.description || null
@@ -164,9 +164,18 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
 
   // --- HANDLERS ---
   const handleDragStart = (e, task) => {
-    draggedTaskRef.current = { 
-      ...task, color: localAssignment?.color || '#3b82f6', course: localAssignment?.course || 'Canvas' 
+    const dragData = { 
+      ...task, 
+      color: localAssignment?.color || '#3b82f6', 
+      course: localAssignment?.course || 'Canvas' 
     };
+    
+    draggedTaskRef.current = dragData;
+    
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", JSON.stringify(dragData));
+
+    e.dataTransfer.setDragImage(new Image(), 0, 0); 
   };
 
   const handleDropOnCalendar = (e, dateStr) => {
@@ -314,7 +323,7 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
                 tasks.map((task) => {
                   const isExpanded = expandedTasks.includes(task.id);
                   return(
-                    <AssignmentTask task={task} handleDragStart={handleDragStart} toggleTaskExpansion={toggleTaskExpansion} toggleTask={toggleTask} localAssignment={localAssignment} handleTimer={handleTimer} setTasks={setTasks}/>
+                    <AssignmentTask key={task.id} task={task} isExpanded={isExpanded} handleDragStart={handleDragStart} toggleTaskExpansion={toggleTaskExpansion} toggleTask={toggleTask} localAssignment={localAssignment} handleTimer={handleTimer} setTasks={setTasks}/>
                   )
               }))}
             </div>
