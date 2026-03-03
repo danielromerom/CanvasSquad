@@ -15,7 +15,7 @@ export default function TimerPanel({timerTask, handleDragStart, toggleTaskExpans
 
                         <div className="flex flex-col items-center border-2 border-gray-400 rounded-xl justify-center shadow-sm mb-4 shrink-0 p-2"> 
                             <ToggleTimer timerTask={timerTask}
-                             taskTime={timerTask.estTime}
+                             taskTime={timerTask.time}
                               handleDragStart={handleDragStart}
                               toggleTaskExpansion={toggleTaskExpansion} 
                               toggleTask={toggleTask} 

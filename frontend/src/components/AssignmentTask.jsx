@@ -41,14 +41,22 @@ export default function AssignmentTask({task, handleDragStart, toggleTaskExpansi
                                 {task.label}
                             </Typography>
 
-                            {activeTab == 'timer'? 
+                            {activeTab == 'timer' ? 
                                 <div className="flex items-center gap-2">
                                     {isExpanded ? <ChevronUp size={16} className="text-gray-400" onClick={() => setIsExpanded(isExpanded => !isExpanded)}/> : <ChevronDown size={16} className="text-gray-400" onClick={() => setIsExpanded(isExpanded => !isExpanded)}/>}
                                 </div>
                                 :
                                 <div className="flex items-center gap-2 ">
-                                    <button  className="bg-blue-50 hover:bg-blue-150  text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap" onClick={() => handleTimer(task)}>
-                                        {task.estTime}
+                                    <button  
+                                        className="bg-blue-50 hover:bg-blue-150  text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap" 
+                                        onClick={() => handleTimer(task)} 
+                                        style={{ 
+                                            border: 'none', 
+                                            outline: 'none', 
+                                            boxShadow: 'none',
+                                            WebkitTapHighlightColor: 'transparent'
+                                        }}>
+                                        {task.time}
                                     </button>
                                     {isExpanded ? <ChevronUp size={16} className="text-gray-400" onClick={() => setIsExpanded(isExpanded => !isExpanded)}/> : <ChevronDown size={16} className="text-gray-400" onClick={() => setIsExpanded(isExpanded => !isExpanded)}/>}
                                 </div>
