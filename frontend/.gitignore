@@ -26,3 +26,24 @@ dist-ssr
 # env vars
 .env
 .env.*
+
+# Frontend build files
+frontend/dist/
+frontend/config.js
+# OS
+Thumbs.db
+.DS_Store
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Misc
+.cache/
+*.bak
+
+# SQLITE db files
+db.sqlite3
+*.sqlite3
