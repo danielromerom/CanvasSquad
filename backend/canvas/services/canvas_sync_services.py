@@ -1,20 +1,24 @@
 # combines logic for syncing courses/assignments from Canvas and generating tasks using LLM
 from canvas.models import Course, Assignment, TaskGeneration, Task
 from .llm_service import generate_task_suggestions
+from django.utils import timezone
+from ..canvas_client import CanvasClient
 
-def sync_assignments(course_canvas_id, course_name, raw_assignments):
+def sync_assignments(course_canvas_id, course_name, raw_assignments, pdf_text_map=None):
     """
-    syncs assignments from Canvas to our DB.
-     - Creates/updates Course and Assignment objects.
-     - Returns a list of normalized assignment dicts for task generation.
+    Syncs assignments from Canvas to our DB.
+    - Creates/updates Course and Assignment objects.
+    - Extracts & caches PDF document text (if present).
+    - Returns normalized assignment dicts for task generation.
     """
-    #  Sync course
+
     course, _ = Course.objects.get_or_create(
         canvas_course_id=str(course_canvas_id),
         defaults={"name": course_name or f"Course {course_canvas_id}"}
     )
 
     normalized_assignments = []
+    pdf_text_map = pdf_text_map or {}
 
     for a in raw_assignments:
         if not a.get("published"):
@@ -28,15 +32,29 @@ def sync_assignments(course_canvas_id, course_name, raw_assignments):
                 "description": a.get("description", ""),
                 "due_at": a.get("due_at"),
                 "points_possible": a.get("points_possible"),
+                "last_synced_at" : timezone.now(),
             }
         )
+        # gets the pdf text according to the assignment id
+        pdf_text = pdf_text_map.get(a["id"], "")
 
+        # if pdf texts exists and we dont already have it mapped to the assingment document
+        # then we create the fields document text and document updated at
+        if pdf_text and not assignment_obj.document_text:
+            assignment_obj.document_text = pdf_text
+            assignment_obj.document_text_updated_at = timezone.now()
+            assignment_obj.save(update_fields=[
+                "document_text",
+                "document_text_updated_at"
+            ])
+    
         normalized_assignments.append({
             "id": assignment_obj.id,  # DB id
             "title": assignment_obj.title,
             "due_at": assignment_obj.due_at,
             "points": assignment_obj.points_possible,
             "description": assignment_obj.description,
+            "document_text": assignment_obj.document_text or "",
         })
 
     return normalized_assignments
@@ -64,6 +82,9 @@ def generate_and_store_tasks(assignments, force=False):
             continue
 
         if assignment_obj.tasks.exists():
+            # if we have a new pdf to the assignment, and havent synced it yet we want to regenerate tasks
+            if  assignment_obj.document_text_updated_at and assignment_obj.document_text_updated_at > assignment_obj.last_synced_at:
+                force = True
             if force:
                 # If froce is true, we delete and rebuild (regen button)
                 assignment_obj.tasks.all().delete()
@@ -77,12 +98,14 @@ def generate_and_store_tasks(assignments, force=False):
             "due_at": assignment_obj.due_at,
             "points": assignment_obj.points_possible,
             "description": assignment_obj.description,
+            "document_text": assignment_obj.document_text or "",
         })
+        
 
     #  Nothing new → no LLM call
     if not assignments_to_generate:
         return {"generated": 0, "skipped": skipped}
-
+    
     # Call LLM only once
     llm_response = generate_task_suggestions(assignments_to_generate)
 

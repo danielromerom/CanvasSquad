@@ -5,16 +5,6 @@ from dotenv import load_dotenv
 import PyPDF2
 
 
-# # Read PDF file
-# def extract_text_from_pdf(pdf_path):
-#     text = ""
-#     with open(pdf_path, 'rb') as file:
-#         pdf_reader = PyPDF2.PdfReader(file)
-#         for page in pdf_reader.pages:
-#             text += page.extract_text() + "\n"
-#     return text
-
-
 
 
 client = openai.OpenAI(
@@ -29,11 +19,14 @@ def generate_task_suggestions(assignments):
     - due_at
     - points
     - description
+    -document_text
     """
 
     prompt = f"""
 You are an expert academic productivity coach focused on Student Agency and overcoming procrastination.
 Your goal is to break assignments into Micro-Tasks that feel easy to start and impossible to fail.
+(The document_text comes from PDFs attached to the assignment and may contain requirements, rubrics, or instructions, If document_text is empty, rely on the description only.)
+
 
 Given the following assignments in JSON format:
 {json.dumps(assignments, indent=2, default=str)}
