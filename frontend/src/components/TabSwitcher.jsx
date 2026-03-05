@@ -4,7 +4,7 @@ const TAB_CONFIG = {
   main: [
     { id: 'schedule', label: 'Schedule', icon: Calendar },
     { id: 'daily',    label: 'Daily',    icon: LayoutList },
-    { id: 'timer',    label: 'Timer',    icon: Timer },
+    // { id: 'timer',    label: 'Timer',    icon: Timer },
     { id: 'stats',    label: 'Stats',    icon: BarChart3 },
   ],
   assignment: [

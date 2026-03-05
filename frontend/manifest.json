@@ -1,14 +1,35 @@
 {
   "manifest_version": 3,
-  "name": "Agency - Canvas Assistant",
+  "name": "Compass - Canvas Assistant",
   "version": "1.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1QFXPfF4tDzusZSVBy0GvrJPVwxTl0CL2PnWlQ3zn1nz8M0wbCIlxP8nf7MB29PQdSe/DdguYcXSthxWX5EjcwRMzLWNA30/u/SAWBaervs0W+efJ58FwOsLPyQ31ps9GVh3dRcOFkurMI+gWI/fjjGq8MPXweR6zEy4M7Hl2+LUf0FyuKVeVfgIEhftrt9ku2oCyiU+A7Mn7/Iz8Kg3hOYMZSkSLvyqMY1DlyGXHiLEHf5VX2FRB1IFFTvb38WZTxfYQVb51q+6cZYS+7W9zwu0+qK06qcFF6SpCIgTNKTekyoBn+4vu6LtEVOv0eRT4RUpROV2kB3dq5tkdqCgvQIDAQAB",
-  "permissions": ["storage"],
-  "action": { "default_title": "Agency" },
+  "icons": {
+    "16": "CompassLogoPlain.png",
+    "48": "CompassLogoPlain.png",
+    "128": "CompassLogoPlain.png"
+  },
+  "permissions": [
+  "storage",
+  "activeTab"
+  ],
+  "action": { 
+    "default_title": "Compass",
+    "default_icon": {
+      "16": "CompassLogoPlain.png",
+      "48": "CompassLogoPlain.png",
+      "128": "CompassLogoPlain.png"
+    }
+  },
   "background": {
     "service_worker": "src/background.js",
     "type": "module"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["CompassLogoPlain.png"],
+      "matches": ["https://*.instructure.com/*"]
+    }
+  ],
   "content_scripts": [
     {
       "js": ["src/content/index.jsx"],
