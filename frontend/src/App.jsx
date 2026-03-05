@@ -1,3 +1,4 @@
+/* global chrome */
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Card } from '@mui/material';
 import MainPanel from './components/MainPanel';
@@ -54,11 +55,20 @@ function App() {
       <Box sx={{ 
         borderBottom: '1px solid rgb(39, 53, 64, 0.1)', 
         pb: 1, mt: 2.75, mb: 1,
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+        display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 1
       }}>
         <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 'bold', color: 'rgb(39, 53, 64)' }}>
-          {(view === 'assignment' || view === 'courseAssignments') ? 'Task Breakdown' : 'Agency Schedule'}
+          {(view === 'assignment' || view === 'courseAssignments') ? 'Task Breakdown' : 'Compass'}
         </Typography>
+        <img 
+          src={chrome.runtime.getURL("CompassLogoPlain.png")}
+          alt="Compass Logo" 
+          style={{ 
+            width: '20px',
+            height: '20px', 
+            objectFit: 'contain'
+          }} 
+        />
       </Box>
 
       <Card elevation={0} sx={{ bgcolor: 'transparent' }}>

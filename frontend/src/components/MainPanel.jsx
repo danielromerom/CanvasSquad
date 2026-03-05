@@ -6,6 +6,7 @@ import { API_BASE_URL, FETCH_HEADERS } from '../../config.js';
 import WeeklyCalendar from './WeeklyCalendar';
 import TimerPanel from './TimerPanel.jsx';
 import StatsPanel from './StatsPanel.jsx';
+import DailyPanel from './DailyPanel';
 
 const COURSE_COLORS = [
   '#3b82f6',
@@ -137,7 +138,13 @@ export default function MainPanel({ filteredCourseId }) {
         return inTimeframe && matchesCourse;
       });
 
-      setAssignments(filtered); // The filtered list for the Cards
+      filtered.sort((a, b) => {
+        if (!a.raw_due_at) return 1; 
+        if (!b.raw_due_at) return -1;
+        return new Date(a.raw_due_at) - new Date(b.raw_due_at);
+      });
+
+      setAssignments(filtered);
       setIsAssignmentsLoading(false);
     };
 
@@ -166,6 +173,72 @@ export default function MainPanel({ filteredCourseId }) {
       const cID = assign.canvas_course_id;
       const aID = assign.canvas_assignment_id;
       window.open(`https://ufldev.instructure.com/courses/${cID}/assignments/${aID}`, '_blank');
+  };
+
+  const handleToggleDailyTask = (taskId) => {
+    let isCurrentlyCompleted = false;
+    for (const dateStr of Object.keys(scheduledTasks)) {
+      const foundTask = scheduledTasks[dateStr].find(t => t.id === taskId);
+      if (foundTask) {
+        isCurrentlyCompleted = foundTask.completed;
+        break;
+      }
+    }
+    
+    const willBeCompleted = !isCurrentlyCompleted;
+
+    const today = new Date().toDateString();
+    let stats = JSON.parse(localStorage.getItem('userStats')) || {
+        totalTasksCompleted: 0,
+        currentStreak: 0,
+        lastActiveDate: null,
+        assignmentsCompleted: 0,
+        xp: 0,
+        totalFocusMinutes: 0,
+        totalSessions: 0
+    };
+
+    if (willBeCompleted) {
+        stats.totalTasksCompleted += 1;
+        stats.xp += 10; 
+
+        if (stats.lastActiveDate !== today) {
+            if (!stats.lastActiveDate) {
+                stats.currentStreak = 1;
+            } else {
+                const lastDate = new Date(stats.lastActiveDate);
+                const currentDate = new Date(today);
+                const diffTime = Math.abs(currentDate - lastDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+                if (diffDays === 1) {
+                    stats.currentStreak += 1; 
+                } else if (diffDays > 1) {
+                    stats.currentStreak = 1; 
+                }
+            }
+            stats.lastActiveDate = today;
+        }
+    } else {
+        stats.totalTasksCompleted = Math.max(0, stats.totalTasksCompleted - 1);
+        stats.xp = Math.max(0, stats.xp - 10); 
+    }
+
+    localStorage.setItem('userStats', JSON.stringify(stats));
+    window.dispatchEvent(new Event('statsUpdated'));
+
+    setScheduledTasks(prev => {
+      const newState = { ...prev };
+      Object.keys(newState).forEach(dateStr => {
+        newState[dateStr] = newState[dateStr].map(t => {
+          if (t.id === taskId) {
+            return { ...t, completed: willBeCompleted };
+          }
+          return t;
+        });
+      });
+      return newState;
+    });
   };
 
   // const toggleAssignmentTask = (_, taskId) => {
@@ -424,6 +497,22 @@ export default function MainPanel({ filteredCourseId }) {
                   // let scheduledCount = 0;
                   // Object.values(scheduledTasks).flat().forEach(t => { if (assignment.tasks.some(at => at.id === t.id)) scheduledCount++; });
 
+                let isUrgent = false;
+                if (assignment.raw_due_at) {
+                  const dueDateObj = new Date(assignment.raw_due_at);
+                  const todayObj = new Date();
+                  const tomorrowObj = new Date(todayObj);
+                  tomorrowObj.setDate(tomorrowObj.getDate() + 1);
+
+                  dueDateObj.setHours(0,0,0,0);
+                  todayObj.setHours(0,0,0,0);
+                  tomorrowObj.setHours(0,0,0,0);
+
+                  if (dueDateObj.getTime() === todayObj.getTime() || dueDateObj.getTime() === tomorrowObj.getTime()) {
+                      isUrgent = true;
+                    }
+                  }
+
                   return (
                     <div 
                     key={assignment.id} 
@@ -445,7 +534,9 @@ export default function MainPanel({ filteredCourseId }) {
                           </div>
                         </div>
                         <div style={{ marginTop: '4px', display: 'flex', gap: '12px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
-                          <span>Due: {assignment.due}</span>
+                          <span style={{ color: isUrgent ? '#ef4444' : '#6b7280' }}>
+                            Due: {assignment.due}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -455,7 +546,14 @@ export default function MainPanel({ filteredCourseId }) {
               )}
           </>
         )}
-        {currentTab === 'timer' && <TimerPanel />}
+        {currentTab === 'daily' && (
+          <DailyPanel 
+            scheduledTasks={scheduledTasks}
+            allHydratedAssignments={allHydratedAssignments}
+            onToggleTask={handleToggleDailyTask}
+          />
+        )}
+        {/* {currentTab === 'timer' && <TimerPanel />} */}
         {currentTab === 'stats' && <StatsPanel />}
       </Box>
     </Box>
