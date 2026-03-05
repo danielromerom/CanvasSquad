@@ -201,7 +201,7 @@ export default function DailyPanel({ scheduledTasks, allHydratedAssignments, onT
             Your day is clear!
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Drag tasks onto today in the Schedule tab to build your plan.
+            Drag tasks onto today in the Assignment Panel to build your plan.
           </Typography>
         </Box>
       ) : (
