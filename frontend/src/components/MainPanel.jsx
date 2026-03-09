@@ -1,3 +1,5 @@
+/* global chrome */
+
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Box, Typography, Collapse, IconButton } from '@mui/material';
 import { Timer, BarChart3, ChevronLeft, ChevronRight, Sparkles, ChevronDown, ChevronRight as ChevronRightIcon, GripVertical, CheckCircle2, Circle, X } from 'lucide-react';
@@ -26,7 +28,7 @@ const getCourseColor = (id) => {
 };
 
 // Added filteredCourseId to the props
-export default function MainPanel({ filteredCourseId }) {
+export default function MainPanel({ filteredCourseId, handleSetLogin }) {
   const [currentTab, setCurrentTab] = useState('schedule');
 
   const [assignmentStartDate, setAssignmentStartDate] = useState(new Date());
@@ -46,6 +48,11 @@ export default function MainPanel({ filteredCourseId }) {
 
   const draggedTaskRef = useRef(null);
 
+  const handleLogout = async () => {
+    console.warn("Session expired or invalid. Logging out...");
+    await chrome.storage.local.remove(['canvasToken']);
+    handleSetLogin(false);
+  };
 
   useEffect(() => {
     localStorage.setItem('scheduledTasks', JSON.stringify(scheduledTasks));
@@ -55,20 +62,50 @@ export default function MainPanel({ filteredCourseId }) {
     const fetchInitial = async () => {
       setIsInitialLoading(true);
       try {
-        const coursesResponse = await fetch(`${API_BASE_URL}/api/canvas/courses/`, { headers: FETCH_HEADERS });
-        const coursesData = await coursesResponse.json();
+        // 1. Grab the token from Chrome storage
+        const storage = await chrome.storage.local.get(['canvasToken']);
+        const token = storage.canvasToken;
+
+        if (!token) {
+          console.error("No token found, user needs to login.");
+          handleSetLogin(false);
+          return;
+        }
+
+        // 2. Add the Authorization header to your fetch
+        const response = await fetch(`${API_BASE_URL}/api/canvas/courses/`, { 
+          headers: {
+            ...FETCH_HEADERS,
+            'Authorization': `Bearer ${token}` 
+          } 
+        });
+
+        if (response.status === 401) {
+          await handleLogout();
+          return;
+        }
+
+        const coursesData = await response.json();
         const courseList = coursesData.courses || [];
 
         const syncPromises = courseList.map(course => 
-            fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/sync/`, { 
-                method: 'POST', 
-                headers: FETCH_HEADERS 
-            })
+          fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/sync/`, { 
+            method: 'POST', 
+            headers: {
+                    ...FETCH_HEADERS,
+                    'Authorization': `Bearer ${token}`
+                  }
+              })
         );
         await Promise.all(syncPromises);
 
         const assignmentPromises = courseList.map(async (course) => {
-          const res = await fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/assignments/`, { headers: FETCH_HEADERS });
+          const res = await fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/assignments/`, { 
+            headers: {
+              ...FETCH_HEADERS,
+              'Authorization': `Bearer ${token}`
+            }
+          });
           if (!res.ok) return [];
           const data = await res.json();
           
@@ -102,7 +139,15 @@ export default function MainPanel({ filteredCourseId }) {
         let tasks = [];
         const taskIdToUse = assign.canvas_assignment_id || assign.id; 
         try {
-          const taskRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${taskIdToUse}/tasks/`, { headers: FETCH_HEADERS });
+          const storage = await chrome.storage.local.get(['canvasToken']);
+        const token = storage.canvasToken;
+
+          const taskRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${taskIdToUse}/tasks/`, { 
+            headers: {
+              ...FETCH_HEADERS,
+              'Authorization': `Bearer ${token}`
+            }
+         });
           if (taskRes.ok) {
             const taskData = await taskRes.json();
             tasks = taskData.tasks || [];
