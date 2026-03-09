@@ -13,6 +13,12 @@ function App() {
   const [login, setLogin] = useState(false)
 
   useEffect(() => {
+    chrome.storage.local.get(['isLoggedIn'], (result) => {
+      if (result.isLoggedIn) {
+        setLogin(true);
+      }
+    });
+
     const checkContext = () => {
       const path = window.location.pathname; 
       
@@ -53,6 +59,11 @@ function App() {
     return () => clearInterval(intervalId);
   }, []);
 
+  const handleSetLogin = (val) => {
+    setLogin(val);
+    chrome.storage.local.set({ isLoggedIn: val });
+  };
+
   return (
     <Box sx={{ width: '100%', fontFamily: 'Lato, sans-serif', mb: 2 }}>
       <Box sx={{ 
@@ -73,25 +84,28 @@ function App() {
           }} 
         />
       </Box>
-
-         
-      <Card sx={{minHeight: "100vh"}}>
-        {login? 
-        (<Card elevation={0} sx={{ bgcolor: 'transparent' }}>
-        {/* Only pass showDropdown=true if we are in the 'courseAssignments' view */}
-        {(view === 'assignment' || view === 'courseAssignments') ? (
-          <AssignmentPanel 
-            courseId={courseId} 
-            initialAssignmentId={assignmentId} 
-            showDropdown={view === 'courseAssignments'} 
-          />
-        ) : (
-          <MainPanel filteredCourseId={courseId} />
-        )}
-      </Card>): 
-        (<LoginPanel setLogin={setLogin}/>)}
-      </Card>
       
+      <Card elevation={0} sx={{ minHeight: "100vh", border: 'none', bgcolor: 'transparent' }}>
+        {login ? (
+          <Card elevation={0} sx={{ bgcolor: 'transparent' }}>
+            {(view === 'assignment' || view === 'courseAssignments') ? (
+              <AssignmentPanel 
+                courseId={courseId} 
+                initialAssignmentId={assignmentId} 
+                showDropdown={view === 'courseAssignments'} 
+                handleSetLogin={handleSetLogin}
+              />
+            ) : (
+              <MainPanel 
+                filteredCourseId={courseId} 
+                handleSetLogin={handleSetLogin}
+              />
+            )}
+          </Card>
+        ) : (
+          <LoginPanel setLogin={handleSetLogin} />
+        )}
+      </Card>
       
       {/* <Card elevation={0} sx={{ bgcolor: 'transparent' }}> */}
         {/* Only pass showDropdown=true if we are in the 'courseAssignments' view */}
