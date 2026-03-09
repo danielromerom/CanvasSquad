@@ -3,6 +3,7 @@ import re # regex module
 import io
 from pypdf import PdfReader
 from urllib.parse import urljoin
+import fitz
 
 class CanvasClient:
     def __init__(self, base_url, token):
@@ -105,7 +106,7 @@ class CanvasClient:
                 "filename": meta.get("filename"),
                 "content_type": meta.get("content-type") or meta.get("content_type"),
                 "size": meta.get("size"),
-                "download_url": meta.get("url"),
+                "download_url" : meta.get("url") or meta.get("download_url"),
                 "display_name": meta.get("display_name"),
             })
 
@@ -113,11 +114,11 @@ class CanvasClient:
     
     # helper function for converting bytes to text
     def pdf_bytes_to_text(self, pdf_bytes: bytes) -> str:
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        parts = []
-        for page in reader.pages:
-            parts.append(page.extract_text() or "")
-        return "\n".join(parts).strip()
+        text = []
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            for page in doc:
+                text.append(page.get_text())
+        return "\n".join(text).strip()
     
 
     def get_assignment_pdf_text(self, course_id: int, assignment_id: int, max_chars: int = 20000) -> str:
