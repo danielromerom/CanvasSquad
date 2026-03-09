@@ -9,6 +9,7 @@
     "128": "CompassLogoPlain.png"
   },
   "permissions": [
+  "identity",
   "storage",
   "activeTab"
   ],

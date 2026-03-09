@@ -1,3 +1,5 @@
+/* global chrome */
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Box, Typography, Card, CardContent, CircularProgress, Collapse, Button, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import { ChevronDown, CheckCircle2, Circle, Sparkles, ChevronUp, RefreshCw } from 'lucide-react';
@@ -20,13 +22,14 @@ const getCourseColor = (id) => {
   return COURSE_COLORS[index];
 };
 
-export default function AssignmentPanel({ courseId, initialAssignmentId, showDropdown }) {
+export default function AssignmentPanel({ courseId, initialAssignmentId, showDropdown, handleSetLogin }) {
   const [activeTab, setActiveTab] = useState('tasks');
   const [tasks, setTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [localAssignment, setLocalAssignment] = useState(null);
   const [expandedTasks, setExpandedTasks] = useState([]);
+  const [isEditMode, setIsEditMode] = useState(false);
   
   // NEW: State for dropdown selection and assignment list
   const [selectedAssignmentId, setSelectedAssignmentId] = useState(initialAssignmentId);
@@ -40,6 +43,118 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
   });
 
   const draggedTaskRef = useRef(null);
+
+  const addTask = async () => {
+    try {
+        const storage = await chrome.storage.local.get(['canvasToken']);
+        const res = await fetch(`${API_BASE_URL}/api/canvas/assignments/${selectedAssignmentId}/tasks/add/`, {
+            method: 'POST',
+            headers: {
+                ...FETCH_HEADERS,
+                'Authorization': `Bearer ${storage.canvasToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ label: "New Step", description: "" })
+        });
+
+        if (res.ok) {
+            const newTaskData = await res.json();
+            // Create the local task object using the ID returned by Django
+            const newTask = { 
+                id: `task-${selectedAssignmentId}-${newTaskData.id}`, 
+                label: newTaskData.title, 
+                time: "15m", 
+                completed: false,
+                description: ""
+            };
+            setTasks(prev => [...prev, newTask]);
+        }
+    } catch (err) {
+        console.error("Failed to add task:", err);
+    }
+};
+
+const deleteTask = async (taskId) => {
+    // Optimistic UI update
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+    setScheduledTasks(prev => {
+        const newState = { ...prev };
+        Object.keys(newState).forEach(date => {
+            newState[date] = newState[date].filter(t => t.id !== taskId);
+        });
+        return newState;
+    });
+
+    // API call to delete from DB
+    const dbId = taskId.split('-').pop();
+    try {
+        const storage = await chrome.storage.local.get(['canvasToken']);
+        await fetch(`${API_BASE_URL}/api/canvas/tasks/${dbId}/delete/`, {
+            method: 'DELETE',
+            headers: {
+                ...FETCH_HEADERS,
+                'Authorization': `Bearer ${storage.canvasToken}`
+            }
+        });
+    } catch (err) {
+        console.error("Failed to delete task:", err);
+    }
+  };
+
+  const updateTask = async (taskId, updates) => {
+    // 1. Update UI locally (Optimistic update)
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
+
+    // 2. Persist to DB
+    // Assuming your ID format is "task-123", we grab the "123"
+    const dbId = taskId.split('-').pop();
+
+    try {
+        const storage = await chrome.storage.local.get(['canvasToken']);
+        const response = await fetch(`${API_BASE_URL}/api/canvas/tasks/${dbId}/update/`, {
+            method: 'PATCH',
+            headers: {
+                ...FETCH_HEADERS,
+                'Authorization': `Bearer ${storage.canvasToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updates)
+        });
+
+        if (!response.ok) throw new Error('Failed to save task');
+    } catch (err) {
+      console.error("Persistence failed:", err);
+    }
+  };
+
+  const moveTask = async (dragIndex, hoverIndex) => {
+    // 1. Calculate the new order locally
+    const reorderedTasks = [...tasks];
+    const [removed] = reorderedTasks.splice(dragIndex, 1);
+    reorderedTasks.splice(hoverIndex, 0, removed);
+    
+    // 2. Update UI state
+    setTasks(reorderedTasks);
+
+    // 3. Sync with Backend
+    try {
+        // Map our complex IDs ("task-123-45") back to simple DB primary keys (45)
+        const orderedDbIds = reorderedTasks.map(t => t.id.split('-').pop());
+        
+        const storage = await chrome.storage.local.get(['canvasToken']);
+        await fetch(`${API_BASE_URL}/api/canvas/assignments/${selectedAssignmentId}/tasks/reorder/`, {
+            method: 'POST',
+            headers: {
+                ...FETCH_HEADERS,
+                'Authorization': `Bearer ${storage.canvasToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ordered_ids: orderedDbIds })
+        });
+    } catch (err) {
+        console.error("Failed to sync new order:", err);
+    }
+  };
 
   const handleDirectSchedule = (taskToSchedule, dateStr) => {
     setScheduledTasks(prev => {
@@ -73,119 +188,132 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
   // 2. Fetch the list of assignments for the dropdown (List view only)
   useEffect(() => {
     if (showDropdown && courseId) {
-      const fetchList = async () => {
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/canvas/courses/${courseId}/assignments/`, { headers: FETCH_HEADERS });
-          if (res.ok) {
-            const data = await res.json();
-            setCourseAssignments(data.assignments || []);
-            // Auto-select first assignment if none selected
-            if (!selectedAssignmentId && data.assignments?.length > 0) {
-              setSelectedAssignmentId(data.assignments[0].canvas_assignment_id);
+        const fetchList = async () => {
+          const storage = await chrome.storage.local.get(['canvasToken']);
+          const token = storage.canvasToken;
+          if (!token) return;
+
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/canvas/courses/${courseId}/assignments/`, { 
+              headers: { 
+                ...FETCH_HEADERS, 
+                'Authorization': `Bearer ${token}`,
+                'ngrok-skip-browser-warning': 'true' 
+              } 
+            });
+            if (res.ok) {
+              const data = await res.json();
+              setCourseAssignments(data.assignments || []);
+              if (!selectedAssignmentId && data.assignments?.length > 0) {
+                setSelectedAssignmentId(data.assignments[0].canvas_assignment_id);
+              }
             }
-          }
-        } catch (err) {
-          console.error("Failed to fetch course assignments", err);
-        }
-      };
-      fetchList();
-    }
-  }, [courseId, showDropdown]);
+          } catch (err) { console.error("Failed to fetch assignments", err); }
+        };
+        fetchList();
+      }
+    }, [courseId, showDropdown]);
 
   // 3. Fetch task data for the SELECTED assignment
   const fetchAssignmentData = async (forceRegenerate = false) => {
     if (!courseId || !selectedAssignmentId) return;
 
+    const storage = await chrome.storage.local.get(['canvasToken']);
+    const token = storage.canvasToken;
+
+    if (!token) {
+      handleSetLogin(false);
+      return;
+    }
+
+    const authHeaders = {
+      ...FETCH_HEADERS,
+      'Authorization': `Bearer ${token}`,
+      'ngrok-skip-browser-warning': 'true'
+    };
+
     if (forceRegenerate) {
-        setIsRegenerating(true);
-        
-        setScheduledTasks(prevSchedule => {
-          const newState = { ...prevSchedule };
-          
-          Object.keys(newState).forEach(dateStr => {
-            newState[dateStr] = newState[dateStr].filter(
-              t => !t.id.includes(`task-${selectedAssignmentId}`)
-            );
-            
-            if (newState[dateStr].length === 0) {
-              delete newState[dateStr];
-            }
-          });
-          
-          return newState;
+      setIsRegenerating(true);
+      setTasks([]);
+
+      setScheduledTasks(prev => {
+        const newState = { ...prev };
+        Object.keys(newState).forEach(date => {
+          newState[date] = newState[date].filter(t => !t.id.includes(`task-${selectedAssignmentId}`));
+          if (newState[date].length === 0) delete newState[date];
         });
+        return newState;
+      });
     } else {
-        setIsLoading(true);
+      setIsLoading(true);
+      setTasks([]);
     }
 
     try {
-      // Fetch assignment metadata to update the card
-      const metaRes = await fetch(`${API_BASE_URL}/api/canvas/courses/${courseId}/assignments/`, { headers: FETCH_HEADERS });
+      // 2. Fetch Assignment Metadata (Course name, Due date, etc)
+      const metaRes = await fetch(`${API_BASE_URL}/api/canvas/courses/${courseId}/assignments/`, { headers: authHeaders });
+      if (metaRes.status === 401) return handleSetLogin(false);
+      
       if (metaRes.ok) {
-          const metaData = await metaRes.json();
-          const assignmentMeta = metaData.assignments.find(a => 
-             String(a.canvas_assignment_id) === String(selectedAssignmentId) || String(a.id) === String(selectedAssignmentId)
-          );
-
-          if (assignmentMeta) {
-             setLocalAssignment({
-                id: String(assignmentMeta.canvas_assignment_id || assignmentMeta.id),
-                title: assignmentMeta.title,
-                course: metaData.course_name || `Course ${courseId}`,
-                color: getCourseColor(courseId),
-                due: assignmentMeta.due_at ? new Date(assignmentMeta.due_at).toLocaleDateString() : 'No Date',
-                raw_due: assignmentMeta.due_at
-             });
-          }
+        const metaData = await metaRes.json();
+        const found = metaData.assignments.find(a => String(a.canvas_assignment_id) === String(selectedAssignmentId) || String(a.id) === String(selectedAssignmentId));
+        if (found) {
+          setLocalAssignment({
+            id: String(found.canvas_assignment_id || found.id),
+            title: found.title,
+            course: metaData.course_name || `Course ${courseId}`,
+            color: getCourseColor(courseId),
+            due: found.due_at ? new Date(found.due_at).toLocaleDateString() : 'No Date',
+            raw_due: found.due_at
+          });
+        }
       }
 
-      let tasksRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${selectedAssignmentId}/tasks/`, { headers: FETCH_HEADERS });
+      // 3. Check for existing tasks
+      let tasksRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${selectedAssignmentId}/tasks/`, { headers: authHeaders });
       let tasksData = null;
       let shouldGenerate = forceRegenerate;
 
       if (tasksRes.status === 404) {
-          shouldGenerate = true;
+        shouldGenerate = true;
       } else if (tasksRes.ok) {
-          tasksData = await tasksRes.json();
-          if (!tasksData.tasks || tasksData.tasks.length === 0) {
-              shouldGenerate = true;
-          }
+        tasksData = await tasksRes.json();
+        if (!tasksData.tasks || tasksData.tasks.length === 0) shouldGenerate = true;
       }
 
+      // 4. Run Sync if needed
       if (shouldGenerate) {
-          await fetch(`${API_BASE_URL}/api/canvas/courses/${courseId}/sync/`, { 
-              method: 'POST', 
-              headers: FETCH_HEADERS,
-              body: JSON.stringify({ force: true })
-          });
+        await fetch(`${API_BASE_URL}/api/canvas/courses/${courseId}/sync/`, { 
+          method: 'POST', 
+          headers: authHeaders,
+          body: JSON.stringify({ force: true })
+        });
 
-          tasksRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${selectedAssignmentId}/tasks/`, { headers: FETCH_HEADERS });
-          if (tasksRes.ok) {
-              tasksData = await tasksRes.json();
-          }
+        tasksRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${selectedAssignmentId}/tasks/`, { 
+          headers: authHeaders
+        });
+        
+        if (tasksRes.ok) {
+          tasksData = await tasksRes.json();
+        }
       }
 
-      if (tasksData && tasksData.tasks) {
-          const locallyCompletedIds = new Set();
-          Object.values(scheduledTasks).flat().forEach(t => {
-              if (t.completed) locallyCompletedIds.add(t.id);
-          });
+      // 5. Final State Update
+      if (tasksData?.tasks) {
+        const locallyCompletedIds = new Set();
+        Object.values(scheduledTasks).flat().forEach(t => { if (t.completed) locallyCompletedIds.add(t.id); });
 
-          const formattedTasks = tasksData.tasks.map((t) => {
-             const frontendTaskId = `task-${selectedAssignmentId}-${t.id}`;
-             return {
-                 id: frontendTaskId, 
-                 label: t.title, 
-                 time: t.estimated_minutes ? `${t.estimated_minutes}m` : '15m',
-                 completed: t.is_completed || locallyCompletedIds.has(frontendTaskId),
-                 aiSummary: t.ai_insight || null, 
-                 description: t.description || null
-             }
-          });
-          setTasks(formattedTasks);
+        setTasks(tasksData.tasks.map(t => ({
+          id: `task-${selectedAssignmentId}-${t.id}`,
+          label: t.title,
+          time: t.estimated_minutes ? `${t.estimated_minutes}m` : '15m',
+          completed: t.is_completed || locallyCompletedIds.has(`task-${selectedAssignmentId}-${t.id}`),
+          aiSummary: t.ai_insight || null,
+          description: t.description || null
+        })));
       }
     } catch (err) {
-      console.error("Error fetching assignment details:", err);
+      console.error("Critical Panel Fetch Error:", err);
     } finally {
       setIsLoading(false);
       setIsRegenerating(false);
@@ -201,9 +329,11 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
   }, [scheduledTasks]);
 
   // --- HANDLERS ---
-  const handleDragStart = (e, task) => {
+  const handleDragStart = (e, task, index) => {
     const dragData = { 
       ...task, 
+      index,
+      isEditMode,
       color: localAssignment?.color || '#3b82f6', 
       course: localAssignment?.course || 'Canvas' 
     };
@@ -217,6 +347,8 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
   };
 
   const handleDropOnCalendar = (e, dateStr) => {
+  if (isEditMode) return; 
+
   e.preventDefault();
   e.stopPropagation();
   
@@ -441,14 +573,43 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
             <WeeklyCalendar variant="detail" scheduledTasks={scheduledTasks} onDropTask={handleDropOnCalendar} onRemoveTask={removeTaskFromDay} onClearDay={handleClearDay} onToggleTask={toggleTask} localAssignment={localAssignment} />
 
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, mt: 4 }}>
-             <Typography variant="h6" sx={{ fontWeight: 800, color: '#1a1a1a' }}>Task Breakdown</Typography>
+             <Typography variant="h6" sx={{ fontWeight: 800, color: '#1a1a1a' }}>
+                {isEditMode ? 'Editing Tasks' : 'Task Breakdown'}
+              </Typography>
              <Box sx={{ display: 'flex', gap: 1 }}>
-                 <Button onClick={handleAutoSchedule} sx={{ background: '#000', color: '#fff', textTransform: 'none', fontSize: '11px', fontWeight: 'bold', padding: '4px 12px', borderRadius: '6px', '&:hover': { background: '#333' } }}>
-                   <Sparkles size={12} style={{ marginRight: '4px' }} /> Auto
-                 </Button>
-                 <Button startIcon={<RefreshCw size={14} className={isRegenerating ? "animate-spin" : ""} />} onClick={() => fetchAssignmentData(true)} disabled={isRegenerating} size="small" sx={{ textTransform: 'none', fontSize: '12px', color: '#6b7280' }}>
-                   {isRegenerating ? 'Regenerating...' : 'Regenerate'}
-                 </Button>
+                {!isEditMode && (
+                  <>
+                    <Button onClick={handleAutoSchedule} sx={{ background: '#000', color: '#fff', textTransform: 'none', fontSize: '11px', fontWeight: 'bold', padding: '4px 12px', borderRadius: '6px' }}>
+                      <Sparkles size={12} style={{ marginRight: '4px' }} /> Auto
+                    </Button>
+                    <Button startIcon={<RefreshCw size={14} className={isRegenerating ? "animate-spin" : ""} />} onClick={() => fetchAssignmentData(true)} disabled={isRegenerating} size="small" sx={{ textTransform: 'none', fontSize: '12px', color: '#6b7280' }}>
+                      Regenerate
+                    </Button>
+                  </>
+                )}
+        
+              {isEditMode && (
+                <Button onClick={addTask} variant="outlined" size="small" sx={{ fontSize: '11px', fontWeight: 'bold', borderRadius: '6px', textTransform: 'none' }}>
+                  + Add Step
+                </Button>
+              )}
+
+              <Button 
+                onClick={() => setIsEditMode(!isEditMode)} 
+                sx={{ 
+                background: isEditMode ? '#10b981' : '#f3f4f6', 
+                color: isEditMode ? '#fff' : '#374151', 
+                textTransform: 'none', 
+                fontSize: '11px', 
+                fontWeight: 'bold', 
+                padding: '2px 8px',
+                minWidth: 'unset',
+                borderRadius: '6px',
+                '&:hover': { background: isEditMode ? '#059669' : '#e5e7eb' }
+              }}
+              >
+                {isEditMode ? 'Done' : 'Edit'}
+              </Button>
              </Box>
           </Box>
           
@@ -461,10 +622,28 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
                       No tasks generated yet. Click 'Regenerate' to create a plan.
                   </Typography>
               ) : (
-                tasks.map((task) => {
+                tasks.map((task, index) => {
                   const isExpanded = expandedTasks.includes(task.id);
-                  return(
-                    <AssignmentTask key={task.id} task={task} isExpanded={isExpanded} handleDragStart={handleDragStart} toggleTaskExpansion={toggleTaskExpansion} toggleTask={toggleTask} localAssignment={localAssignment} handleTimer={handleTimer} activeTab={activeTab} scheduledTasks={scheduledTasks} setTasks={setTasks} onScheduleTask={handleDirectSchedule}/>
+                  return (
+                    <AssignmentTask 
+                      key={`${task.id}-${task.label}-${task.description}`}
+                      task={task} 
+                      index={index}
+                      isEditMode={isEditMode}
+                      isExpanded={isExpanded} 
+                      handleDragStart={handleDragStart} 
+                      toggleTaskExpansion={toggleTaskExpansion} 
+                      toggleTask={toggleTask} 
+                      onDelete={deleteTask}
+                      onUpdate={updateTask}
+                      onMove={moveTask}   
+                      localAssignment={localAssignment} 
+                      handleTimer={handleTimer} 
+                      activeTab={activeTab} 
+                      scheduledTasks={scheduledTasks} 
+                      setTasks={setTasks} 
+                      onScheduleTask={handleDirectSchedule}
+                    />
                   )
               }))}
             </div>

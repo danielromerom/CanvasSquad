@@ -3,13 +3,22 @@ import React, { useState, useEffect } from 'react';
 import { Box, Typography, Card } from '@mui/material';
 import MainPanel from './components/MainPanel';
 import AssignmentPanel from './components/AssignmentPanel';
+import LoginPanel from './components/LoginPanel';
+
 
 function App() {
   const [view, setView] = useState('main');
   const [courseId, setCourseId] = useState(null);
   const [assignmentId, setAssignmentId] = useState(null);
+  const [login, setLogin] = useState(false)
 
   useEffect(() => {
+    chrome.storage.local.get(['isLoggedIn'], (result) => {
+      if (result.isLoggedIn) {
+        setLogin(true);
+      }
+    });
+
     const checkContext = () => {
       const path = window.location.pathname; 
       
@@ -50,6 +59,11 @@ function App() {
     return () => clearInterval(intervalId);
   }, []);
 
+  const handleSetLogin = (val) => {
+    setLogin(val);
+    chrome.storage.local.set({ isLoggedIn: val });
+  };
+
   return (
     <Box sx={{ width: '100%', fontFamily: 'Lato, sans-serif', mb: 2 }}>
       <Box sx={{ 
@@ -70,10 +84,32 @@ function App() {
           }} 
         />
       </Box>
-
-      <Card elevation={0} sx={{ bgcolor: 'transparent' }}>
+      
+      <Card elevation={0} sx={{ minHeight: "100vh", border: 'none', bgcolor: 'transparent' }}>
+        {login ? (
+          <Card elevation={0} sx={{ bgcolor: 'transparent' }}>
+            {(view === 'assignment' || view === 'courseAssignments') ? (
+              <AssignmentPanel 
+                courseId={courseId} 
+                initialAssignmentId={assignmentId} 
+                showDropdown={view === 'courseAssignments'} 
+                handleSetLogin={handleSetLogin}
+              />
+            ) : (
+              <MainPanel 
+                filteredCourseId={courseId} 
+                handleSetLogin={handleSetLogin}
+              />
+            )}
+          </Card>
+        ) : (
+          <LoginPanel setLogin={handleSetLogin} />
+        )}
+      </Card>
+      
+      {/* <Card elevation={0} sx={{ bgcolor: 'transparent' }}> */}
         {/* Only pass showDropdown=true if we are in the 'courseAssignments' view */}
-        {(view === 'assignment' || view === 'courseAssignments') ? (
+        {/* {(view === 'assignment' || view === 'courseAssignments') ? (
           <AssignmentPanel 
             courseId={courseId} 
             initialAssignmentId={assignmentId} 
@@ -82,7 +118,7 @@ function App() {
         ) : (
           <MainPanel filteredCourseId={courseId} />
         )}
-      </Card>
+      </Card> */}
     </Box>
   );
 }
