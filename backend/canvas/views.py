@@ -104,12 +104,25 @@ class CourseSyncView(APIView):
         course_data = client.get_course(course_id)
 
         course_name = course_data.get("name", "Unknown Course")
+        
+
+        pdf_text_by_assignment = {}
+
+        for a in raw_assignments:
+            try:
+                pdf_text_by_assignment[a["id"]] = client.get_assignment_pdf_text(
+                    course_id=course_id,
+                    assignment_id=a["id"]
+                )
+            except Exception:
+                pdf_text_by_assignment[a["id"]] = ""
 
         # Sync assignments into DB
         assignments = sync_assignments(
             course_canvas_id=course_id,
             course_name=course_name,
-            raw_assignments=raw_assignments
+            raw_assignments=raw_assignments,
+            pdf_text_map=pdf_text_by_assignment
         )
 
         # Generate tasks via LLM

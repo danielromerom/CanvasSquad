@@ -56,6 +56,8 @@ class Assignment(models.Model):
     is_completed = models.BooleanField(default=False)
     last_synced_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    document_text = models.TextField(blank=True, default="")
+    document_text_updated_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return self.title
