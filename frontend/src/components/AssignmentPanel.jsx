@@ -41,6 +41,28 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
 
   const draggedTaskRef = useRef(null);
 
+  const handleDirectSchedule = (taskToSchedule, dateStr) => {
+    setScheduledTasks(prev => {
+      const newState = { ...prev };
+      
+      Object.keys(newState).forEach(day => {
+        newState[day] = newState[day].filter(t => t.id !== taskToSchedule.id);
+      });
+
+      if (!newState[dateStr]) newState[dateStr] = [];
+      
+      const taskWithColor = { 
+        ...taskToSchedule, 
+        color: localAssignment?.color || '#3b82f6',
+        course: localAssignment?.course || 'Canvas'
+      };
+
+      newState[dateStr].push(taskWithColor);
+      
+      return newState;
+    });
+  };
+
   // 1. Sync selectedAssignmentId when the URL changes (detail view)
   useEffect(() => {
     if (initialAssignmentId) {
@@ -442,7 +464,7 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
                 tasks.map((task) => {
                   const isExpanded = expandedTasks.includes(task.id);
                   return(
-                    <AssignmentTask key={task.id} task={task} isExpanded={isExpanded} handleDragStart={handleDragStart} toggleTaskExpansion={toggleTaskExpansion} toggleTask={toggleTask} localAssignment={localAssignment} handleTimer={handleTimer} activeTab={activeTab} scheduledTasks={scheduledTasks} setTasks={setTasks}/>
+                    <AssignmentTask key={task.id} task={task} isExpanded={isExpanded} handleDragStart={handleDragStart} toggleTaskExpansion={toggleTaskExpansion} toggleTask={toggleTask} localAssignment={localAssignment} handleTimer={handleTimer} activeTab={activeTab} scheduledTasks={scheduledTasks} setTasks={setTasks} onScheduleTask={handleDirectSchedule}/>
                   )
               }))}
             </div>
