@@ -134,10 +134,14 @@ CORS_ALLOW_HEADERS = [
     "x-csrftoken",
     "x-requested-with",
     "ngrok-skip-browser-warning",
+    "sentry-trace",
+    "baggage",
+
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "https://ufldev.instructure.com"
+    "https://ufldev.instructure.com",
+    "http://localhost:8000"
 ]
 
 CORS_ALLOWED_ORIGIN_REGEXES = [

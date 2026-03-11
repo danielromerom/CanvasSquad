@@ -12,6 +12,11 @@ class CanvasClient:
         self.session.headers.update({
             "Authorization": f"Bearer {token}"
         })
+    def get_current_user(self):
+        url = urljoin(self.base_url, "/api/v1/users/self")
+        r = self.session.get(url)
+        r.raise_for_status()
+        return r.json()
 
     def list_assignments(self, course_id):
         url = urljoin(self.base_url, f"/api/v1/courses/{course_id}/assignments")
