@@ -20,7 +20,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
             if (authCode) {
                 // IMPORTANT: The fetch must happen here
-                fetch('https://crosscurrented-roselle-prototypical.ngrok-free.dev/api/canvas/exchange/', {
+                fetch('https://compass-qo80.onrender.com/api/canvas/exchange/', {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
