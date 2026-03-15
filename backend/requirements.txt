@@ -26,4 +26,5 @@ urllib3==2.6.3
 python-dotenv==1.2.1
 PyMuPDF==1.27.2
 pypdf==6.7.5
+PyPDF2
 gunicorn
