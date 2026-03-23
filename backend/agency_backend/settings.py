@@ -121,7 +121,7 @@ CANVAS_CLIENT_ID = os.getenv('CANVAS_CLIENT_ID', '')
 CANVAS_CLIENT_SECRET = os.getenv('CANVAS_CLIENT_SECRET', '')
 CANVAS_REDIRECT_URI = os.getenv('CANVAS_REDIRECT_URI', '')
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '.ngrok-free.app', '.ngrok-free.dev']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '.ngrok-free.app', '.ngrok-free.dev', 'compass-qo80.onrender.com']
 
 CORS_ALLOW_HEADERS = [
     "accept",

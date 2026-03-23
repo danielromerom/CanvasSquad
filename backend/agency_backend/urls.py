@@ -16,10 +16,14 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from .auth_views import canvas_authorize_url, canvas_exchange, auth_me, auth_logout, auth_success
 
+def health(request):
+    return JsonResponse({"status": "ok"})
+
 urlpatterns = [
+    path("", health),
     path('admin/', admin.site.urls),
     path("api/canvas/", include("canvas.urls")),
     path("", lambda request: HttpResponse("Backend is running.")),
