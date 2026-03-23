@@ -111,44 +111,193 @@ pytest backend/canvas/tests/test_models.py::TestAssignment::test_assignment_comp
 
 ## Test Coverage
 
-Currently, the project has **25 passing tests** covering:
+Currently, the project has **34 unit/integration tests + 5 functional tests** covering:
 
-| Module | Tests | Coverage | What's Tested |
-|--------|-------|----------|---------------|
-| **Models** | 10 | 100% | StudentProfile, Course, Assignment models and relationships |
-| **Canvas Services** | 8 | ~35% | Canvas sync, PDF storage, assignment updates |
-| **LLM Service** | 5 | ~82% | API integration, task generation mocking |
-| **Canvas Client** | 7 | 37% | API calls, error handling, pagination |
-| **TOTAL** | **25** | **~32%** | Full backend integration |
+| Test Type | Tests | Coverage | What's Tested |
+|-----------|-------|----------|---------------|
+| **Unit Tests - Models** | 10 | 100% | StudentProfile, Course, Assignment models |
+| **Unit Tests - Services** | 8 | ~35% | Canvas sync, PDF storage, updates |
+| **Unit Tests - Canvas Client** | 7 | 37% | API calls, error handling, pagination |
+| **Unit Tests - LLM** | 5 | ~82% | Task generation, mocking |
+| **Integration Tests** | 9 | ~40% | Full workflows, multi-course sync, error recovery |
+| **Functional Tests** | 5 | ~10% | Browser extension UI, user workflows |
+| **TOTAL** | **44** | **~35%** | Full stack from database to browser |
 
 ## Test Structure
 
 Tests are organized in `/backend/canvas/tests/`:
 
-- **test_models.py** — Database models and relationships
-- **test_services.py** — Service layer (Canvas sync, LLM, PDF processing)
-- **test_canvas_client.py** — Canvas API client
+- **test_models.py** — Unit tests for database models and relationships
+- **test_services.py** — Unit tests for service layer (Canvas sync, LLM, PDF processing)
+- **test_canvas_client.py** — Unit tests for Canvas API client
+- **test_integration.py** — Integration tests for full workflows and endpoint testing
+
+## Integration Tests
+
+Integration tests verify that multiple components work together:
+
+### Full Workflow Tests
+```bash
+pytest backend/canvas/tests/test_integration.py::TestCanvasSyncWorkflow -v
+```
+Tests: Canvas sync → database → task generation
+
+### Multi-Course Sync Tests
+```bash
+pytest backend/canvas/tests/test_integration.py::TestMultiCourseSyncWorkflow -v
+```
+Tests: Multiple courses synced independently
+
+### API Endpoint Tests
+```bash
+pytest backend/canvas/tests/test_integration.py::TestCanvasAPIEndpoints -v
+```
+Tests: Django views with real database
+
+### Error Recovery Tests
+```bash
+pytest backend/canvas/tests/test_integration.py::TestErrorRecoveryWorkflow -v
+```
+Tests: System handles errors gracefully
+
+### Multi-Student Tests
+```bash
+pytest backend/canvas/tests/test_integration.py::TestMultiStudentWorkflow -v
+```
+Tests: Multiple students in same course
 
 ## Key Testing Patterns Used
 
 | Pattern | Purpose |
 |---------|---------|
 | **@pytest.mark.django_db** | Access database in tests |
-| **Mock/Patch** | Replace external APIs |
+| **Mock/Patch** | Replace external APIs (Canvas, OpenAI) |
 | **Setup → Action → Assert** | Clear test structure |
 | **pytest.raises()** | Verify exceptions |
 | **refresh_from_db()** | Verify database updates |
+| **Real DB + Mocked APIs** | Integration tests use real DB but mock external services |
 
-## Next Steps for Testing
+## Functional Tests
 
-- [ ] **Add View Tests** — Test Django API endpoints
-- [ ] **Add Frontend Tests** — Jest + React Testing Library for React components
-- [ ] **Add CI/CD** — GitHub Actions to run tests on every push
-- [ ] **Increase Coverage** — Aim for 70%+ code coverage
+Functional tests verify that the Canvas Squad Chrome extension works end-to-end from a user perspective. These tests use Selenium WebDriver to automate browser interactions.
+
+### Setup Requirements
+
+1. **Chrome Browser** - Must be installed on the system
+2. **Extension Built** - Run `npm run build` in the frontend directory
+3. **Python Dependencies** - Selenium and webdriver-manager (already added to requirements.txt)
+
+### Running Functional Tests
+
+```bash
+# Run all functional tests
+pytest backend/canvas/tests/test_functional.py -v -s --tb=short
+
+# Run specific functional test
+pytest backend/canvas/tests/test_functional.py::TestCanvasSquadExtension::test_extension_loads_on_canvas_page -v -s
+
+# Run functional tests with markers
+pytest -m "functional" -v -s
+
+# Skip slow functional tests in CI
+pytest -m "not slow" -v
+```
+
+### Testing on Real Canvas (Authenticated)
+
+To test the extension on actual Canvas pages with authentication:
+
+1. **Set environment variables:**
+```bash
+export CANVAS_TEST_USERNAME="your-username@ufl.edu"
+export CANVAS_TEST_PASSWORD="your-password"
+export CANVAS_TEST_COURSE_URL="https://ufldev.instructure.com/courses/YOUR_COURSE_ID"
+```
+
+2. **Use the test runner script:**
+```bash
+# Run all functional tests
+./run_functional_tests.sh
+
+# Run only authenticated test
+./run_functional_tests.sh auth
+
+# Run only real Canvas access test
+./run_functional_tests.sh real
+```
+
+**Or run directly with pytest:**
+```bash
+pytest backend/canvas/tests/test_functional.py::TestCanvasSquadExtension::test_extension_with_canvas_authentication -v -s
+```
+
+**⚠️ Security Notes:**
+- Never commit credentials to version control
+- Use test accounts with minimal permissions
+- Consider using Canvas API tokens instead of passwords
+- Tests will handle login automatically but may need adjustment for UFL's auth system
+
+### Test Coverage
+
+Functional tests cover:
+
+| Test | Purpose | Status |
+|------|---------|--------|
+| **Extension Loading** | Verifies extension loads in Chrome | ✅ Implemented |
+| **Real Canvas Access** | Tests navigation to Canvas sites | ✅ Implemented |
+| **Authentication Flow** | Tests login to Canvas (requires credentials) | ✅ Implemented |
+| **UI Interaction** | Tests basic extension UI interactions | ✅ Implemented |
+| **Task Generation** | Tests AI task generation workflow | ✅ Framework ready |
+| **PDF Processing** | Tests PDF extraction and processing | ✅ Framework ready |
+| **Feature Accessibility** | Tests all major features are accessible | ✅ Implemented |
+
+**Current Results:** 5 passed, 4 skipped (appropriate for tests without credentials)
+
+### Test Architecture
+
+- **Selenium WebDriver** - Browser automation
+- **Chrome Extension Loading** - Tests run with extension loaded
+- **Local HTML Test Pages** - Simulates Canvas pages for testing
+- **Graceful Degradation** - Tests skip if extension features aren't available
+
+### CI/CD Integration
+
+For continuous integration, functional tests can be run in headless mode:
+
+```bash
+# Add to chrome_options in test setup:
+chrome_options.add_argument("--headless")
+```
+
+### Troubleshooting
+
+**Extension not built error:**
+```bash
+cd frontend && npm run build
+```
+
+**Chrome driver issues:**
+- webdriver-manager handles driver installation automatically
+- If issues persist, manually install ChromeDriver
+
+**Test timeouts:**
+- Functional tests are slower than unit tests
+- Increase timeouts for slower systems
+- Use `--tb=short` for cleaner output
 
 ---
 
 # Version Control & Git Workflow 📝
+
+## Future Testing Improvements
+
+- [ ] **Acceptance Tests** — User story validation and business requirements testing
+- [ ] **Real Canvas Integration** — Test against actual Canvas instance (requires credentials)
+- [ ] **Performance Tests** — Test PDF extraction speed, LLM response times
+- [ ] **Frontend Unit Tests** — Jest + React Testing Library for React components
+- [ ] **CI/CD Pipeline** — GitHub Actions to run tests on every push
+- [ ] **Cross-browser Testing** — Test extension compatibility across browsers
+- [ ] **Load Testing** — Test system performance under load
 
 ## Creating and Pushing to a Branch
 
