@@ -125,7 +125,7 @@ class CourseSyncView(APIView):
                 pdf_text_map=pdf_text_by_assignment
             )
 
-            generate_and_store_tasks(assignments, force_update)
+            # generate_and_store_tasks(assignments, force_update)
 
             return Response({
                 "course_id": course_id,
