@@ -92,8 +92,8 @@ class CourseAssignmentsView(APIView):
 class CourseSyncView(APIView):
     def post(self, request, course_id):
         try:
-            auth_header = request.headers.get('Authorization', '')
-            token = auth_header.split(' ')[1] if 'Bearer ' in auth_header else None
+            auth_header = request.headers.get("Authorization", "")
+            token = auth_header.split(" ")[1] if "Bearer " in auth_header else None
 
             if not token:
                 return Response({"error": "No token provided"}, status=401)
@@ -125,13 +125,25 @@ class CourseSyncView(APIView):
                 pdf_text_map=pdf_text_by_assignment
             )
 
-            # generate_and_store_tasks(assignments, force_update)
+            tasks_generated = True
+
+            try:
+                generate_and_store_tasks(assignments, force_update)
+            except Exception as e:
+                tasks_generated = False
+                print("LLM task generation failed:", str(e))
+                traceback.print_exc()
 
             return Response({
                 "course_id": course_id,
                 "course_name": course_name,
                 "assignment_count": len(assignments),
-                "message": "Assignments synced and tasks generated successfully",
+                "message": (
+                    "Assignments synced and tasks generated successfully"
+                    if tasks_generated
+                    else "Assignments synced successfully, but task generation failed"
+                ),
+                "tasks_generated": tasks_generated,
                 "forced": force_update
             })
 
