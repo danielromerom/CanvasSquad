@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Compass - Canvas Assistant",
-  "version": "1.0",
+  "version": "1.2",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1QFXPfF4tDzusZSVBy0GvrJPVwxTl0CL2PnWlQ3zn1nz8M0wbCIlxP8nf7MB29PQdSe/DdguYcXSthxWX5EjcwRMzLWNA30/u/SAWBaervs0W+efJ58FwOsLPyQ31ps9GVh3dRcOFkurMI+gWI/fjjGq8MPXweR6zEy4M7Hl2+LUf0FyuKVeVfgIEhftrt9ku2oCyiU+A7Mn7/Iz8Kg3hOYMZSkSLvyqMY1DlyGXHiLEHf5VX2FRB1IFFTvb38WZTxfYQVb51q+6cZYS+7W9zwu0+qK06qcFF6SpCIgTNKTekyoBn+4vu6LtEVOv0eRT4RUpROV2kB3dq5tkdqCgvQIDAQAB",
   "icons": {
     "16": "CompassLogoPlain.png",

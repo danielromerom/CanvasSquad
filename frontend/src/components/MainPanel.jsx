@@ -60,19 +60,23 @@ export default function MainPanel({ filteredCourseId, handleSetLogin }) {
 
   useEffect(() => {
     const fetchInitial = async () => {
-      setIsInitialLoading(true);
       try {
-        // 1. Grab the token from Chrome storage
+        // A. INSTANT CACHE LOAD: Check Chrome storage first
+        const cache = await chrome.storage.local.get(['cachedAssignments']);
+        if (cache.cachedAssignments && cache.cachedAssignments.length > 0) {
+            setAllRawAssignments(cache.cachedAssignments);
+            setIsInitialLoading(false); // Turn off spinner immediately!
+        }
+
+        // B. BACKGROUND FETCH: Get token and check for fresh data silently
         const storage = await chrome.storage.local.get(['canvasToken']);
         const token = storage.canvasToken;
 
         if (!token) {
-          console.error("No token found, user needs to login.");
           handleSetLogin(false);
           return;
         }
 
-        // 2. Add the Authorization header to your fetch
         const response = await fetch(`${API_BASE_URL}/api/canvas/courses/`, { 
           headers: {
             ...FETCH_HEADERS,
@@ -88,6 +92,7 @@ export default function MainPanel({ filteredCourseId, handleSetLogin }) {
         const coursesData = await response.json();
         const courseList = coursesData.courses || [];
 
+        // Fetch assignments for all courses (Lightweight DB hit, NO LLM)
         const assignmentPromises = courseList.map(async (course) => {
           const res = await fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/assignments/`, { 
             headers: {
@@ -106,7 +111,11 @@ export default function MainPanel({ filteredCourseId, handleSetLogin }) {
         });
 
         const nestedAssignments = await Promise.all(assignmentPromises);
-        setAllRawAssignments(nestedAssignments.flat());
+        const flatAssignments = nestedAssignments.flat();
+
+        // C. UPDATE CACHE AND STATE: If the background fetch found changes, apply them
+        setAllRawAssignments(flatAssignments);
+        await chrome.storage.local.set({ cachedAssignments: flatAssignments });
 
       } catch (error) {
         console.error("Failed to fetch initial data:", error);
@@ -119,29 +128,12 @@ export default function MainPanel({ filteredCourseId, handleSetLogin }) {
   }, []);
 
   useEffect(() => {
-    const filterAndHydrate = async () => {
-      if (isInitialLoading) return;
+    const filterAndHydrate = () => {
+      if (isInitialLoading && allRawAssignments.length === 0) return;
       setIsAssignmentsLoading(true);
 
-      // 1. First, hydrate EVERY raw assignment so the calendar always has data
-      const hydrated = await Promise.all(allRawAssignments.map(async (assign) => {
-        let tasks = [];
-        const taskIdToUse = assign.canvas_assignment_id || assign.id; 
-        try {
-          const storage = await chrome.storage.local.get(['canvasToken']);
-        const token = storage.canvasToken;
-
-          const taskRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${taskIdToUse}/tasks/`, { 
-            headers: {
-              ...FETCH_HEADERS,
-              'Authorization': `Bearer ${token}`
-            }
-         });
-          if (taskRes.ok) {
-            const taskData = await taskRes.json();
-            tasks = taskData.tasks || [];
-          }
-        } catch (err) { console.warn(err); }
+      // Hydrate instantly without fetching tasks from the backend
+      const hydrated = allRawAssignments.map((assign) => {
 
         return {
           id: `assign-${assign.course_id}-${assign.id}`,
@@ -152,13 +144,13 @@ export default function MainPanel({ filteredCourseId, handleSetLogin }) {
           color: getCourseColor(assign.course_id),
           raw_due_at: assign.due_at,
           due: new Date(assign.due_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute:'2-digit' }),
-          tasks: tasks.map(t => ({ id: `task-${taskIdToUse}-${t.id}`, label: t.title, completed: t.is_completed }))
+          tasks: [] // Tasks are only fetched when clicking into the Assignment Panel!
         };
-      }));
+      });
 
-      setAllHydratedAssignments(hydrated); // The master list for the Calendar
+      setAllHydratedAssignments(hydrated);
 
-      // 2. Now filter that master list for the UI cards below the calendar
+      // Filter for the UI cards below the calendar
       const start = new Date(assignmentStartDate);
       start.setHours(0, 0, 0, 0);
       const end = new Date(start);
@@ -184,7 +176,7 @@ export default function MainPanel({ filteredCourseId, handleSetLogin }) {
 
     filterAndHydrate();
   }, [allRawAssignments, assignmentStartDate, assignmentTimeframe, isInitialLoading, filteredCourseId]);
-
+  
   const moveAssignmentDate = (direction) => {
     const newDate = new Date(assignmentStartDate);
     newDate.setDate(newDate.getDate() + (direction * assignmentTimeframe));

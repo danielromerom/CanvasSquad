@@ -60,32 +60,66 @@ class CoursesView(APIView):
         
 class CourseAssignmentsView(APIView):
     """
-    GET: Return all assignments for a course from the database. Does not call Canvas or LLM.
+    GET: Fetches assignments directly from Canvas, does a lightweight save to the DB 
+    (NO PDFs, NO LLM), and returns them so the Main Panel populates instantly.
     """
     def get(self, request, course_id):
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.split(' ')[1] if 'Bearer ' in auth_header else None
+
+        if not token:
+            return Response({"error": "No token provided"}, status=401)
+
         try:
-            course = Course.objects.get(canvas_course_id=str(course_id))
-        except Course.DoesNotExist:
-            return Response(
-                {"error": f"Course with canvas_course_id {course_id} not found."},
-                status=status.HTTP_404_NOT_FOUND
+            client = CanvasClient(settings.CANVAS_BASE_URL, token)
+            
+            raw_assignments = client.list_assignments(course_id)
+            course_data = client.get_course(course_id)
+            
+            course, _ = Course.objects.get_or_create(
+                canvas_course_id=str(course_id),
+                defaults={"name": course_data.get("name", f"Course {course_id}")}
             )
 
-        assignments = course.assignments.all().values(
-            "id",
-            "canvas_assignment_id",
-            "title",
-            "description",
-            "due_at",
-            "points_possible"
-        )
+            for a in raw_assignments:
+                # Skip unpublished assignments
+                if not a.get("published"):
+                    continue
+                    
+                Assignment.objects.update_or_create(
+                    canvas_assignment_id=str(a["id"]),
+                    defaults={
+                        "course": course,
+                        "title": a.get("name", "Untitled Assignment"),
+                        "description": a.get("description", ""),
+                        "due_at": a.get("due_at"),
+                        "points_possible": a.get("points_possible"),
+                    }
+                )
 
-        return Response({
-            "course_id": course.canvas_course_id,
-            "course_name": course.name,
-            "assignment_count": assignments.count(),
-            "assignments": list(assignments)
-        })
+            assignments = course.assignments.all().values(
+                "id",
+                "canvas_assignment_id",
+                "title",
+                "description",
+                "due_at",
+                "points_possible"
+            )
+
+            return Response({
+                "course_id": course.canvas_course_id,
+                "course_name": course.name,
+                "assignment_count": assignments.count(),
+                "assignments": list(assignments)
+            })
+
+        except HTTPError as e:
+            if e.response.status_code == 401:
+                return Response({"error": "Canvas token expired"}, status=401)
+            return Response({"error": str(e)}, status=500)
+        except Exception as e:
+            print("COURSE ASSIGNMENTS FETCH ERROR:", e)
+            return Response({"error": str(e)}, status=500)
     
 class AssignmentSyncView(APIView):
     """
@@ -102,12 +136,10 @@ class AssignmentSyncView(APIView):
             force_update = request.data.get("force", False)
             client = CanvasClient(settings.CANVAS_BASE_URL, token)
             
-            # Fetch assignments from Canvas
             raw_assignments = client.list_assignments(course_id)
             course_data = client.get_course(course_id)
             course_name = course_data.get("name", "Unknown Course")
 
-            # 🚨 FILTER DOWN TO JUST ONE ASSIGNMENT 🚨
             raw_assignments = [a for a in raw_assignments if str(a["id"]) == str(assignment_id)]
 
             if not raw_assignments:
@@ -123,7 +155,6 @@ class AssignmentSyncView(APIView):
                 except Exception:
                     pdf_text_by_assignment[a["id"]] = ""
 
-            # Sync into DB
             assignments = sync_assignments(
                 course_canvas_id=course_id,
                 course_name=course_name,
@@ -131,7 +162,6 @@ class AssignmentSyncView(APIView):
                 pdf_text_map=pdf_text_by_assignment
             )
 
-            # Generate tasks via LLM (Only takes ~3 seconds now!)
             generate_and_store_tasks(assignments, force_update)
 
             return Response({
