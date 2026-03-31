@@ -79,10 +79,6 @@ Respond ONLY in valid JSON using this structure:
 
     content = response.choices[0].message.content
 
-    print("===== RAW LLM RESPONSE =====")
-    print(content)
-    print("============================")
-
     try:
         llm_data = json.loads(content)
         enhanced_assignments = []
