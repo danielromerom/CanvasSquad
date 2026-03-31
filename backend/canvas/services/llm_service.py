@@ -52,13 +52,14 @@ Respond ONLY in valid JSON using this structure:
 {{
   "assignments": [
     {{
+      "id": 123,
       "title": "Assignment name",
       "priority": "High | Medium | Low",
       "tasks": [
         {{
           "label": "Task description",
           "estimated_time_hours": 1.5,
-          "description: "Optional longer description for the task",
+          "description": "Optional longer description for the task",
           "ai_insight": "The pro-tip or summary here"
         }},
       ]
@@ -78,21 +79,21 @@ Respond ONLY in valid JSON using this structure:
 
     content = response.choices[0].message.content
 
+    print("===== RAW LLM RESPONSE =====")
+    print(content)
+    print("============================")
+
     try:
         llm_data = json.loads(content)
-
         enhanced_assignments = []
 
+        true_assignment = assignments[0] if assignments else None
+
         for llm_assign in llm_data.get("assignments", []):
-            original = next(
-                (a for a in assignments if a["title"] == llm_assign["title"]), 
-                None
-            )
-            
-            # add the due_at field
-            if original:
-                llm_assign["id"] = original["id"]
-                llm_assign["due_at"] = str(original["due_at"])
+            if true_assignment:
+                # Force the true DB ID and due date onto the LLM's output
+                llm_assign["id"] = true_assignment["id"]
+                llm_assign["due_at"] = str(true_assignment["due_at"])
                 
             enhanced_assignments.append(llm_assign)
             

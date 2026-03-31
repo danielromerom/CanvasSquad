@@ -88,17 +88,6 @@ export default function MainPanel({ filteredCourseId, handleSetLogin }) {
         const coursesData = await response.json();
         const courseList = coursesData.courses || [];
 
-        const syncPromises = courseList.map(course => 
-          fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/sync/`, { 
-            method: 'POST', 
-            headers: {
-                    ...FETCH_HEADERS,
-                    'Authorization': `Bearer ${token}`
-                  }
-              })
-        );
-        await Promise.all(syncPromises);
-
         const assignmentPromises = courseList.map(async (course) => {
           const res = await fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/assignments/`, { 
             headers: {

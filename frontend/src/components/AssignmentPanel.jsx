@@ -1,6 +1,6 @@
 /* global chrome */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Box, Typography, Card, CardContent, CircularProgress, Collapse, Button, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import { ChevronDown, CheckCircle2, Circle, Sparkles, ChevronUp, RefreshCw } from 'lucide-react';
 import TabSwitcher from './TabSwitcher';
@@ -43,6 +43,7 @@ export default function AssignmentPanel({ courseId, initialAssignmentId, showDro
   });
 
   const draggedTaskRef = useRef(null);
+  const isFetchingRef = useRef(false);
 
   const addTask = async () => {
     try {
@@ -215,114 +216,117 @@ const deleteTask = async (taskId) => {
     }, [courseId, showDropdown]);
 
   // 3. Fetch task data for the SELECTED assignment
-  const fetchAssignmentData = async (forceRegenerate = false) => {
-    if (!courseId || !selectedAssignmentId) return;
+  const fetchAssignmentData = useCallback(async (forceRegenerate = false) => {
+    // 1. MUTEX LOCK: Prevent double-fetching if React re-renders quickly
+    if (isFetchingRef.current || !courseId || !selectedAssignmentId) return;
+    isFetchingRef.current = true;
 
     const storage = await chrome.storage.local.get(['canvasToken']);
     const token = storage.canvasToken;
-
     if (!token) {
       handleSetLogin(false);
+      isFetchingRef.current = false;
       return;
     }
 
     const authHeaders = {
       ...FETCH_HEADERS,
       'Authorization': `Bearer ${token}`,
-      'ngrok-skip-browser-warning': 'true'
+      'ngrok-skip-browser-warning': 'true',
+      'Content-Type': 'application/json'
     };
 
     if (forceRegenerate) {
       setIsRegenerating(true);
-      setTasks([]);
-
-      setScheduledTasks(prev => {
-        const newState = { ...prev };
-        Object.keys(newState).forEach(date => {
-          newState[date] = newState[date].filter(t => !t.id.includes(`task-${selectedAssignmentId}`));
-          if (newState[date].length === 0) delete newState[date];
-        });
-        return newState;
-      });
+      setTasks([]); 
     } else {
       setIsLoading(true);
-      setTasks([]);
     }
 
     try {
-      // 2. Fetch Assignment Metadata (Course name, Due date, etc)
+      // 2. Fetch Metadata
       const metaRes = await fetch(`${API_BASE_URL}/api/canvas/courses/${courseId}/assignments/`, { headers: authHeaders });
-      if (metaRes.status === 401) return handleSetLogin(false);
-      
       if (metaRes.ok) {
         const metaData = await metaRes.json();
-        const found = metaData.assignments.find(a => String(a.canvas_assignment_id) === String(selectedAssignmentId) || String(a.id) === String(selectedAssignmentId));
+        const found = metaData.assignments.find(a => String(a.canvas_assignment_id) === String(selectedAssignmentId));
         if (found) {
           setLocalAssignment({
-            id: String(found.canvas_assignment_id || found.id),
+            id: String(found.canvas_assignment_id),
             title: found.title,
-            course: metaData.course_name || `Course ${courseId}`,
+            course: metaData.course_name,
             color: getCourseColor(courseId),
             due: found.due_at ? new Date(found.due_at).toLocaleDateString() : 'No Date',
-            raw_due: found.due_at
           });
         }
       }
 
-      // 3. Check for existing tasks
+      // 3. Check current tasks
       let tasksRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${selectedAssignmentId}/tasks/`, { headers: authHeaders });
-      let tasksData = null;
-      let shouldGenerate = forceRegenerate;
+      let tasksData = await tasksRes.json();
 
-      if (tasksRes.status === 404) {
-        shouldGenerate = true;
-      } else if (tasksRes.ok) {
-        tasksData = await tasksRes.json();
-        if (!tasksData.tasks || tasksData.tasks.length === 0) shouldGenerate = true;
-      }
-
-      // 4. Run Sync if needed
-      if (shouldGenerate) {
-        await fetch(`${API_BASE_URL}/api/canvas/courses/${courseId}/sync/`, { 
+      // 4. Trigger Sync if needed (Force Regenerate OR No Tasks Found)
+      if (forceRegenerate || !tasksData.tasks || tasksData.tasks.length === 0) {
+        
+        // Tell backend to sync this specific assignment only
+        await fetch(`${API_BASE_URL}/api/canvas/courses/${courseId}/assignments/${selectedAssignmentId}/sync/`, { 
           method: 'POST', 
           headers: authHeaders,
           body: JSON.stringify({ force: true })
         });
 
-        tasksRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${selectedAssignmentId}/tasks/`, { 
-          headers: authHeaders
-        });
-        
-        if (tasksRes.ok) {
-          tasksData = await tasksRes.json();
+        // RECURSIVE POLLING: Ask the server for the tasks every 2 seconds
+        const pollForTasks = async (attemptsLeft = 5) => {
+          if (attemptsLeft === 0) return null; // Give up after 10 seconds
+
+          // Wait 2 seconds before asking
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Use ?t= Date.now() to bust the browser cache so it actually hits the server
+          const checkRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${selectedAssignmentId}/tasks/?t=${Date.now()}`, { 
+            headers: authHeaders
+          });
+          const checkData = await checkRes.json();
+
+          // If the DB has tasks now, return them!
+          if (checkData?.tasks && checkData.tasks.length > 0) {
+            return checkData;
+          }
+
+          // Otherwise, try again
+          console.log(`Still waiting for tasks to save... (${attemptsLeft - 1} tries left)`);
+          return pollForTasks(attemptsLeft - 1);
+        };
+
+        // Wait for the polling to finish
+        const finalData = await pollForTasks();
+        if (finalData) {
+          tasksData = finalData;
         }
       }
 
-      // 5. Final State Update
-      if (tasksData?.tasks) {
-        const locallyCompletedIds = new Set();
-        Object.values(scheduledTasks).flat().forEach(t => { if (t.completed) locallyCompletedIds.add(t.id); });
-
+      // 5. Update UI state
+      if (tasksData?.tasks && tasksData.tasks.length > 0) {
         setTasks(tasksData.tasks.map(t => ({
           id: `task-${selectedAssignmentId}-${t.id}`,
           label: t.title,
           time: t.estimated_minutes ? `${t.estimated_minutes}m` : '15m',
-          completed: t.is_completed || locallyCompletedIds.has(`task-${selectedAssignmentId}-${t.id}`),
+          completed: t.is_completed,
           aiSummary: t.ai_insight || null,
           description: t.description || null
         })));
       }
     } catch (err) {
-      console.error("Critical Panel Fetch Error:", err);
+      console.error("Fetch Error:", err);
     } finally {
       setIsLoading(false);
       setIsRegenerating(false);
+      isFetchingRef.current = false; // RELEASE THE MUTEX LOCK
     }
-  };
+  }, [courseId, selectedAssignmentId, handleSetLogin]);
 
   useEffect(() => {
     fetchAssignmentData(); 
-  }, [courseId, selectedAssignmentId]);
+  }, [fetchAssignmentData]);
 
   useEffect(() => {
     localStorage.setItem('scheduledTasks', JSON.stringify(scheduledTasks));
@@ -613,7 +617,7 @@ const deleteTask = async (taskId) => {
              </Box>
           </Box>
           
-          {isLoading && tasks.length === 0 ? (
+          {(isLoading || isRegenerating) && tasks.length === 0 ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
           ) : (
             <div className="space-y-3">

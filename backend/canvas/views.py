@@ -7,6 +7,7 @@ import requests
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+import traceback
 from .canvas_client import CanvasClient
 from .models import Course, Assignment, TaskGeneration, Task
 from .services.canvas_sync_services import generate_and_store_tasks, sync_assignments
@@ -85,57 +86,64 @@ class CourseAssignmentsView(APIView):
             "assignment_count": assignments.count(),
             "assignments": list(assignments)
         })
+    
+class AssignmentSyncView(APIView):
+    """
+    POST: Syncs and generates tasks for ONE specific assignment.
+    """
+    def post(self, request, course_id, assignment_id):
+        try:
+            auth_header = request.headers.get('Authorization', '')
+            token = auth_header.split(' ')[1] if 'Bearer ' in auth_header else None
 
+            if not token:
+                return Response({"error": "No token provided"}, status=401)
 
+            force_update = request.data.get("force", False)
+            client = CanvasClient(settings.CANVAS_BASE_URL, token)
+            
+            # Fetch assignments from Canvas
+            raw_assignments = client.list_assignments(course_id)
+            course_data = client.get_course(course_id)
+            course_name = course_data.get("name", "Unknown Course")
 
-class CourseSyncView(APIView):
-    def post(self, request, course_id):
-        auth_header = request.headers.get('Authorization', '')
-        token = auth_header.split(' ')[1] if 'Bearer ' in auth_header else None
-        
-        if not token:
-            return Response({"error": "No token provided"}, status=401)
+            # 🚨 FILTER DOWN TO JUST ONE ASSIGNMENT 🚨
+            raw_assignments = [a for a in raw_assignments if str(a["id"]) == str(assignment_id)]
 
-        force_update = request.data.get("force", False)
+            if not raw_assignments:
+                 return Response({"error": "Assignment not found in Canvas"}, status=404)
 
-        client = CanvasClient(settings.CANVAS_BASE_URL, token)
-        
-        raw_assignments = client.list_assignments(course_id)
-        course_data = client.get_course(course_id)
+            pdf_text_by_assignment = {}
+            for a in raw_assignments:
+                try:
+                    pdf_text_by_assignment[a["id"]] = client.get_assignment_pdf_text(
+                        course_id=course_id,
+                        assignment_id=a["id"]
+                    )
+                except Exception:
+                    pdf_text_by_assignment[a["id"]] = ""
 
-        course_name = course_data.get("name", "Unknown Course")
-        
+            # Sync into DB
+            assignments = sync_assignments(
+                course_canvas_id=course_id,
+                course_name=course_name,
+                raw_assignments=raw_assignments,
+                pdf_text_map=pdf_text_by_assignment
+            )
 
-        pdf_text_by_assignment = {}
+            # Generate tasks via LLM (Only takes ~3 seconds now!)
+            generate_and_store_tasks(assignments, force_update)
 
-        for a in raw_assignments:
-            try:
-                pdf_text_by_assignment[a["id"]] = client.get_assignment_pdf_text(
-                    course_id=course_id,
-                    assignment_id=a["id"]
-                )
-            except Exception:
-                pdf_text_by_assignment[a["id"]] = ""
+            return Response({
+                "course_id": course_id,
+                "assignment_id": assignment_id,
+                "message": "Single assignment synced successfully",
+                "forced": force_update
+            })
 
-        # Sync assignments into DB
-        assignments = sync_assignments(
-            course_canvas_id=course_id,
-            course_name=course_name,
-            raw_assignments=raw_assignments,
-            pdf_text_map=pdf_text_by_assignment
-        )
-
-        # Generate tasks via LLM
-        generate_and_store_tasks(assignments, force_update)
-
-        return Response({
-            "course_id": course_id,
-            "course_name": course_name,
-            "assignment_count": len(assignments),
-            "message": "Assignments synced and tasks generated successfully",
-            "forced": force_update
-        })
-
+        except Exception as e:
+            print("SINGLE SYNC ERROR:", e)
+            return Response({"error": str(e)}, status=500)
     
 class AssignmentTasksView(APIView):
     """
