@@ -60,64 +60,59 @@ export default function MainPanel({ filteredCourseId, handleSetLogin }) {
 
   useEffect(() => {
     const fetchInitial = async () => {
-      setIsInitialLoading(true);
+      // 1. STALE-WHILE-REVALIDATE: Load cache immediately
+      const cached = await chrome.storage.local.get(['cachedAssignments']);
+      if (cached.cachedAssignments) {
+        setAllRawAssignments(cached.cachedAssignments);
+        setIsInitialLoading(false); // UI shows cached data immediately
+      }
+
       try {
-        // 1. Grab the token from Chrome storage
         const storage = await chrome.storage.local.get(['canvasToken']);
         const token = storage.canvasToken;
+        if (!token) { handleSetLogin(false); return; }
 
-        if (!token) {
-          console.error("No token found, user needs to login.");
-          handleSetLogin(false);
-          return;
-        }
-
-        // 2. Add the Authorization header to your fetch
         const response = await fetch(`${API_BASE_URL}/api/canvas/courses/`, { 
-          headers: {
-            ...FETCH_HEADERS,
-            'Authorization': `Bearer ${token}` 
-          } 
+          headers: { ...FETCH_HEADERS, 'Authorization': `Bearer ${token}` } 
         });
 
-        if (response.status === 401) {
-          await handleLogout();
-          return;
-        }
+        if (response.status === 401) { await handleLogout(); return; }
 
         const coursesData = await response.json();
         const courseList = coursesData.courses || [];
 
-        const syncPromises = courseList.map(course => 
-          fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/sync/`, { 
-            method: 'POST', 
-            headers: {
-                    ...FETCH_HEADERS,
-                    'Authorization': `Bearer ${token}`
-                  }
+        // 2. PARALLEL EXECUTION: Fire all syncs and fetches at once
+        const freshData = await Promise.all(courseList.map(async (course) => {
+          try {
+            // Trigger sync and assignments in parallel for this course
+            const [_, assignRes] = await Promise.all([
+              fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/sync/`, { 
+                method: 'POST', headers: { ...FETCH_HEADERS, 'Authorization': `Bearer ${token}` }
+              }),
+              fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/assignments/`, { 
+                headers: { ...FETCH_HEADERS, 'Authorization': `Bearer ${token}` }
               })
-        );
-        await Promise.all(syncPromises);
+            ]);
 
-        const assignmentPromises = courseList.map(async (course) => {
-          const res = await fetch(`${API_BASE_URL}/api/canvas/courses/${course.id}/assignments/`, { 
-            headers: {
-              ...FETCH_HEADERS,
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          if (!res.ok) return [];
-          const data = await res.json();
-          
-          return data.assignments.map(a => ({
-            ...a,
-            course_name: course.name || course.course_code,
-            course_id: course.id
-          }));
-        });
+            if (!assignRes.ok) return [];
+            const data = await assignRes.json();
+            
+            return data.assignments.map(a => ({
+              ...a,
+              course_name: course.name || course.course_code,
+              course_id: course.id
+            }));
+          } catch (err) {
+            console.error(`Error fetching course ${course.id}:`, err);
+            return [];
+          }
+        }));
 
-        const nestedAssignments = await Promise.all(assignmentPromises);
-        setAllRawAssignments(nestedAssignments.flat());
+        const flattenedAssignments = freshData.flat();
+        
+        // 3. UPDATE CACHE AND STATE
+        setAllRawAssignments(flattenedAssignments);
+        await chrome.storage.local.set({ cachedAssignments: flattenedAssignments });
 
       } catch (error) {
         console.error("Failed to fetch initial data:", error);
@@ -129,25 +124,23 @@ export default function MainPanel({ filteredCourseId, handleSetLogin }) {
     fetchInitial();
   }, []);
 
+  // HYDRATION: Parallel Task fetching
   useEffect(() => {
     const filterAndHydrate = async () => {
-      if (isInitialLoading) return;
+      if (isInitialLoading || allRawAssignments.length === 0) return;
       setIsAssignmentsLoading(true);
 
-      // 1. First, hydrate EVERY raw assignment so the calendar always has data
+      const storage = await chrome.storage.local.get(['canvasToken']);
+      const token = storage.canvasToken;
+
       const hydrated = await Promise.all(allRawAssignments.map(async (assign) => {
         let tasks = [];
         const taskIdToUse = assign.canvas_assignment_id || assign.id; 
         try {
-          const storage = await chrome.storage.local.get(['canvasToken']);
-        const token = storage.canvasToken;
-
+          // Parallelize subtask retrieval
           const taskRes = await fetch(`${API_BASE_URL}/api/canvas/assignments/${taskIdToUse}/tasks/`, { 
-            headers: {
-              ...FETCH_HEADERS,
-              'Authorization': `Bearer ${token}`
-            }
-         });
+            headers: { ...FETCH_HEADERS, 'Authorization': `Bearer ${token}` }
+          });
           if (taskRes.ok) {
             const taskData = await taskRes.json();
             tasks = taskData.tasks || [];
@@ -167,9 +160,9 @@ export default function MainPanel({ filteredCourseId, handleSetLogin }) {
         };
       }));
 
-      setAllHydratedAssignments(hydrated); // The master list for the Calendar
+      setAllHydratedAssignments(hydrated);
 
-      // 2. Now filter that master list for the UI cards below the calendar
+      // Filtering logic
       const start = new Date(assignmentStartDate);
       start.setHours(0, 0, 0, 0);
       const end = new Date(start);
@@ -181,13 +174,7 @@ export default function MainPanel({ filteredCourseId, handleSetLogin }) {
         const inTimeframe = dueDate >= start && dueDate <= end;
         const matchesCourse = filteredCourseId ? String(assign.canvas_course_id) === String(filteredCourseId) : true;
         return inTimeframe && matchesCourse;
-      });
-
-      filtered.sort((a, b) => {
-        if (!a.raw_due_at) return 1; 
-        if (!b.raw_due_at) return -1;
-        return new Date(a.raw_due_at) - new Date(b.raw_due_at);
-      });
+      }).sort((a, b) => new Date(a.raw_due_at) - new Date(b.raw_due_at));
 
       setAssignments(filtered);
       setIsAssignmentsLoading(false);
@@ -195,7 +182,6 @@ export default function MainPanel({ filteredCourseId, handleSetLogin }) {
 
     filterAndHydrate();
   }, [allRawAssignments, assignmentStartDate, assignmentTimeframe, isInitialLoading, filteredCourseId]);
-
   const moveAssignmentDate = (direction) => {
     const newDate = new Date(assignmentStartDate);
     newDate.setDate(newDate.getDate() + (direction * assignmentTimeframe));

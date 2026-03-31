@@ -28,13 +28,13 @@
   "web_accessible_resources": [
     {
       "resources": ["CompassLogoPlain.png"],
-      "matches": ["https://*.instructure.com/*"]
+      "matches": ["https://ufldev.instructure.com/*"]
     }
   ],
   "content_scripts": [
     {
       "js": ["src/content/index.jsx"],
-      "matches": ["https://*.instructure.com/*"],
+      "matches": ["https://ufldev.instructure.com/*"],
       "run_at": "document_idle"
     }
   ]
