@@ -81,11 +81,16 @@ class CourseAssignmentsView(APIView):
                 defaults={"name": course_data.get("name", f"Course {course_id}")}
             )
 
+            current_canvas_ids = []
+
             for a in raw_assignments:
                 # Skip unpublished assignments
                 if not a.get("published"):
                     continue
                     
+                canvas_id = str(a["id"])
+                current_canvas_ids.append(canvas_id)
+
                 Assignment.objects.update_or_create(
                     canvas_assignment_id=str(a["id"]),
                     defaults={
@@ -96,6 +101,8 @@ class CourseAssignmentsView(APIView):
                         "points_possible": a.get("points_possible"),
                     }
                 )
+
+            course.assignments.exclude(canvas_assignment_id__in=current_canvas_ids).delete()
 
             assignments = course.assignments.all().values(
                 "id",
