@@ -256,6 +256,7 @@ const deleteTask = async (taskId) => {
             course: metaData.course_name,
             color: getCourseColor(courseId),
             due: found.due_at ? new Date(found.due_at).toLocaleDateString() : 'No Date',
+            raw_due: found.due_at
           });
         }
       }
