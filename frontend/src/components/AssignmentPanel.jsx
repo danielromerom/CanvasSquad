@@ -256,6 +256,7 @@ const deleteTask = async (taskId) => {
             course: metaData.course_name,
             color: getCourseColor(courseId),
             due: found.due_at ? new Date(found.due_at).toLocaleDateString() : 'No Date',
+            raw_due: found.due_at
           });
         }
       }
@@ -537,13 +538,21 @@ const deleteTask = async (taskId) => {
       
       {/* Dropdown - ONLY shows on list page */}
       {showDropdown && courseAssignments.length > 0 && (
-        <FormControl fullWidth sx={{ mb: 3 }}>
+        <FormControl fullWidth sx={{ mb: 3 }} disabled={isLoading || isRegenerating}>
           <InputLabel id="assignment-select-label">Select Assignment</InputLabel>
           <Select
             labelId="assignment-select-label"
             value={selectedAssignmentId || ''}
             label="Select Assignment"
-            onChange={(e) => setSelectedAssignmentId(e.target.value)}
+            onChange={(e) => {
+              const newId = e.target.value;
+            setSelectedAssignmentId(newId);
+            
+            setTasks([]); 
+            setLocalAssignment(null);
+            
+            setIsLoading(true);
+            }}
             sx={{ borderRadius: '12px', fontSize: '0.9rem', bgcolor: 'white' }}
           >
             {courseAssignments.map((a) => (
@@ -552,6 +561,11 @@ const deleteTask = async (taskId) => {
               </MenuItem>
             ))}
           </Select>
+          {(isLoading || isRegenerating) && (
+            <Typography variant="caption" sx={{ mt: 0.5, ml: 1, color: 'text.secondary', fontStyle: 'italic' }}>
+              Please wait for subtasks to load before switching...
+            </Typography>
+          )}
         </FormControl>
       )}
 
